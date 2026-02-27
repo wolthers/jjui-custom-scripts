@@ -8,10 +8,13 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:watch": "tsup --watch",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
     "lint": "oxlint --deny-warnings src",
     "lint:fix": "oxlint --deny-warnings --fix src",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -32,6 +35,7 @@
     "execa": "~9.6.1"
   },
   "devDependencies": {
+    "prettier": "~3.4.2",
     "@types/node": "~25.3.2",
     "oxlint": "~1.50.0",
     "tsup": "~8.5.1",

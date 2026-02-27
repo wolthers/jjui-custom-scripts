@@ -18,7 +18,8 @@ const defaultRegistry = (): WorkspaceRegistry => ({
   workspaces: {},
 });
 
-const registryPath = (repoRoot: string): string => join(repoRoot, REGISTRY_RELATIVE_PATH);
+const registryPath = (repoRoot: string): string =>
+  join(repoRoot, REGISTRY_RELATIVE_PATH);
 
 const parseRegistry = (raw: string): WorkspaceRegistry => {
   const data: unknown = JSON.parse(raw);
@@ -33,7 +34,9 @@ const parseRegistry = (raw: string): WorkspaceRegistry => {
   ) {
     return data as WorkspaceRegistry;
   }
-  throw new Error(`Invalid workspace registry format in ${REGISTRY_RELATIVE_PATH}`);
+  throw new Error(
+    `Invalid workspace registry format in ${REGISTRY_RELATIVE_PATH}`,
+  );
 };
 
 async function loadRegistry(repoRoot: string): Promise<WorkspaceRegistry> {
@@ -49,9 +52,16 @@ async function loadRegistry(repoRoot: string): Promise<WorkspaceRegistry> {
   }
 }
 
-async function saveRegistry(repoRoot: string, registry: WorkspaceRegistry): Promise<void> {
+async function saveRegistry(
+  repoRoot: string,
+  registry: WorkspaceRegistry,
+): Promise<void> {
   await mkdir(join(repoRoot, ".jj"), { recursive: true });
-  await writeFile(registryPath(repoRoot), `${JSON.stringify(registry, null, 2)}\n`, "utf8");
+  await writeFile(
+    registryPath(repoRoot),
+    `${JSON.stringify(registry, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 export async function rememberWorkspace(params: {
@@ -75,7 +85,10 @@ export async function lookupWorkspacePath(
   return registry.workspaces[workspace]?.path;
 }
 
-export async function forgetWorkspaceRecord(repoRoot: string, workspace: string): Promise<void> {
+export async function forgetWorkspaceRecord(
+  repoRoot: string,
+  workspace: string,
+): Promise<void> {
   const registry = await loadRegistry(repoRoot);
   if (!(workspace in registry.workspaces)) {
     return;

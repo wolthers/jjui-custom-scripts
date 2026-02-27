@@ -13,12 +13,11 @@ Then point your jj/jjui config at the built binary (see [Configuration](#configu
 
 ## Usage
 
-- **`jj-scripts pr view --change-id <id>`** — Resolve the bookmark for the given change and open its PR on GitHub in the browser.
+- **`jj-scripts pr view --change-id <id>`** — Resolve the bookmark for the given change and open its PR on GitHub in the browser. If the bookmark has no PR, parses a `(#number)` reference from the change description and opens that PR by number.
 - **`jj-scripts pr create --change-id <id>`** — Try to view an existing PR first; if none exists, generate a PR body with Cursor CLI, open it in your editor, then create a draft PR and open it.
-- **`jj-scripts pr view-or-create --change-id <id>`** — Same behavior as `pr create`, kept as an explicit workflow command.
 - **`jj-scripts stack integrate -r <rev>`** — Rebase the given revision onto `trunk()` then merge (integrate into a mega merge).
 - **`jj-scripts stack restack`** — Run `jj simplify-parents` then rebase mutable roots onto `trunk()`.
-- **`jj-scripts workspace add <destination> [--name <name>]`** — Create a new jj workspace, copy relevant `.env*` files, run an initial setup prompt via Cursor Agent, open a task prompt file in Cursor (`--wait`), then optionally run Cursor Agent with that prompt.
+- **`jj-scripts workspace add <destination> [--name <name>] [-r <rev>]`** — Create a new jj workspace branching from the given revision (default: `trunk()`), copy relevant `.env*` files, run an initial setup prompt via Cursor Agent, open a task prompt file in Cursor (`--wait`), then optionally run Cursor Agent with that prompt.
 - **`jj-scripts workspace remove <name> [--path <path>]`** — Forget the workspace with `jj workspace forget` and delete its folder (path from tracking metadata or `--path`).
 
 Requires `jj` and `gh` on your PATH.
@@ -28,13 +27,27 @@ Requires `jj` and `gh` on your PATH.
 Your configs have been wired to invoke this CLI so you no longer need inline Lua or shell snippets.
 
 - **jj** — `jj integrate` and `jj restack` run the CLI via `util exec`. Update the path in `~/.config/jj/config.toml` if you move the repo.
-- **jjui** — Custom commands for “Integrate”, “View PR on GitHub”, “Create draft PR”, and “View or create PR” call the CLI. These commands use jjui’s `$change_id` placeholder when supported.
+- **jjui** — Add custom commands in `~/.config/jjui/config.toml` that call this CLI with the absolute path to `dist/cli.js`. Use jjui’s `$change_id` placeholder for change-scoped commands.
 
-Use the **absolute path** to `dist/cli.js` in both configs, e.g.:
+Example jjui custom commands (replace `PATH_TO_JJ_SCRIPTS` with the repo path, e.g. `/Volumes/Work/github/jj-scripts`):
 
 ```toml
-# Example: jj alias
-integrate = ["util", "exec", "--", "node", "/path/to/jjui-custom-scripts/dist/cli.js", "stack", "integrate", "-r", "@"]
+[custom_commands.integrate]
+desc = "Integrate change in a stack"
+key = ["i"]
+args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "stack", "integrate", "-r", "@"]
+show = "interactive"
+
+[custom_commands.view-pr]
+desc = "View PR on GitHub"
+key = ["o"]
+args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "pr", "view", "--change-id", "$change_id"]
+show = "interactive"
+
+[custom_commands.create-pr]
+desc = "Create draft PR (or view existing)"
+args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "pr", "create", "--change-id", "$change_id"]
+show = "interactive"
 ```
 
 ## Adding a new command

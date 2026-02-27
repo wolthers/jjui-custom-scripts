@@ -1,12 +1,11 @@
-import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { registerWorkspace } from "./index.js";
-import { cliArgs, runCli } from "../../test-utils/cli.js";
+import { cliArgs, programWithWorkspace, runCli } from "../../test-utils/cli.js";
 import * as jjLib from "../../lib/jj.js";
 import * as registryLib from "./registry.js";
 
 vi.mock("../../lib/jj.js", async () => {
-  const mod = await vi.importActual<typeof import("../../lib/jj.js")>("../../lib/jj.js");
+  const mod =
+    await vi.importActual<typeof import("../../lib/jj.js")>("../../lib/jj.js");
   return { ...mod, jj: vi.fn(), jjCapture: vi.fn() };
 });
 vi.mock("./registry.js", () => ({
@@ -27,17 +26,20 @@ describe("workspace remove", () => {
     vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
     vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(undefined);
 
-    const program = new Command();
-    program.name("jj-scripts");
-    registerWorkspace(program);
-    const result = await runCli(program, cliArgs("workspace", "remove", "my-ws", "--keep-files"));
+    const program = programWithWorkspace();
+    const result = await runCli(
+      program,
+      cliArgs("workspace", "remove", "my-ws", "--keep-files"),
+    );
 
     expect(result.exitCode).toBe(0);
-    expect(jjLib.jj).toHaveBeenCalledWith(
-      ["workspace", "forget", "my-ws"],
-      { cwd: repoRoot },
+    expect(jjLib.jj).toHaveBeenCalledWith(["workspace", "forget", "my-ws"], {
+      cwd: repoRoot,
+    });
+    expect(registryLib.forgetWorkspaceRecord).toHaveBeenCalledWith(
+      repoRoot,
+      "my-ws",
     );
-    expect(registryLib.forgetWorkspaceRecord).toHaveBeenCalledWith(repoRoot, "my-ws");
   });
 
   it("uses --path when provided", async () => {
@@ -45,29 +47,42 @@ describe("workspace remove", () => {
     vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
     vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(undefined);
 
-    const program = new Command();
-    program.name("jj-scripts");
-    registerWorkspace(program);
-    await runCli(program, cliArgs("workspace", "remove", "my-ws", "--path", "/custom/path", "--keep-files"));
+    const program = programWithWorkspace();
+    await runCli(
+      program,
+      cliArgs(
+        "workspace",
+        "remove",
+        "my-ws",
+        "--path",
+        "/custom/path",
+        "--keep-files",
+      ),
+    );
 
     expect(registryLib.lookupWorkspacePath).not.toHaveBeenCalled();
-    expect(jjLib.jj).toHaveBeenCalledWith(
-      ["workspace", "forget", "my-ws"],
-      { cwd: repoRoot },
-    );
+    expect(jjLib.jj).toHaveBeenCalledWith(["workspace", "forget", "my-ws"], {
+      cwd: repoRoot,
+    });
   });
 
   it("looks up path from registry when --path not provided", async () => {
     vi.mocked(jjLib.jjCapture).mockResolvedValue(repoRoot);
     vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
-    vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue("/tmp/repo/ws1");
+    vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(
+      "/tmp/repo/ws1",
+    );
 
-    const program = new Command();
-    program.name("jj-scripts");
-    registerWorkspace(program);
-    await runCli(program, cliArgs("workspace", "remove", "my-ws", "--keep-files"));
+    const program = programWithWorkspace();
+    await runCli(
+      program,
+      cliArgs("workspace", "remove", "my-ws", "--keep-files"),
+    );
 
-    expect(registryLib.lookupWorkspacePath).toHaveBeenCalledWith(repoRoot, "my-ws");
+    expect(registryLib.lookupWorkspacePath).toHaveBeenCalledWith(
+      repoRoot,
+      "my-ws",
+    );
   });
 
   it("throws when target is repo root (unsafe delete)", async () => {
@@ -75,9 +90,7 @@ describe("workspace remove", () => {
     vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
     vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(repoRoot);
 
-    const program = new Command();
-    program.name("jj-scripts");
-    registerWorkspace(program);
+    const program = programWithWorkspace();
     await expect(
       runCli(program, cliArgs("workspace", "remove", "my-ws")),
     ).rejects.toThrow(/Refusing to delete unsafe path/);

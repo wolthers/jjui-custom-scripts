@@ -1,14 +1,9 @@
-import { Command } from "commander";
 import { describe, expect, it } from "vitest";
-import { registerPing } from "./ping.js";
-import { cliArgs, runCli } from "../test-utils/cli.js";
+import { cliArgs, programWithPing, runCli } from "../test-utils/cli.js";
 
 describe("ping", () => {
   it("emits pong and exits 0", async () => {
-    const program = new Command();
-    program.name("jj-scripts");
-    registerPing(program);
-
+    const program = programWithPing();
     const result = await runCli(program, cliArgs("ping"));
 
     expect(result.exitCode).toBe(0);

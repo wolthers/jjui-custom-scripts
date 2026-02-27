@@ -1,7 +1,5 @@
-import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cliArgs, runCli } from "../../test-utils/cli.js";
-import { registerIntegrate } from "./integrate.js";
+import { cliArgs, programWithStack, runCli } from "../../test-utils/cli.js";
 import * as jjLib from "../../lib/jj.js";
 
 vi.mock("../../lib/jj.js", () => ({
@@ -14,30 +12,37 @@ describe("stack integrate", () => {
   });
 
   it("calls jj with revision from -r", async () => {
-    const program = new Command();
-    program.name("jj-scripts");
-    const stack = program.command("stack");
-    registerIntegrate(stack);
-
-    const result = await runCli(program, cliArgs("stack", "integrate", "-r", "main"));
+    const program = programWithStack();
+    const result = await runCli(
+      program,
+      cliArgs("stack", "integrate", "-r", "main"),
+    );
 
     expect(result.exitCode).toBe(0);
     expect(vi.mocked(jjLib.jj)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(jjLib.jj)).toHaveBeenCalledWith(
-      ["rebase", "-A", "trunk()", "-B", "merge", "-r", "main"],
-    );
+    expect(vi.mocked(jjLib.jj)).toHaveBeenCalledWith([
+      "rebase",
+      "-A",
+      "trunk()",
+      "-B",
+      "merge",
+      "-r",
+      "main",
+    ]);
   });
 
   it("calls jj with revision from --revision", async () => {
-    const program = new Command();
-    program.name("jj-scripts");
-    const stack = program.command("stack");
-    registerIntegrate(stack);
-
+    const program = programWithStack();
     await runCli(program, cliArgs("stack", "integrate", "--revision", "@"));
 
-    expect(vi.mocked(jjLib.jj)).toHaveBeenCalledWith(
-      ["rebase", "-A", "trunk()", "-B", "merge", "-r", "@"],
-    );
+    expect(vi.mocked(jjLib.jj)).toHaveBeenCalledWith([
+      "rebase",
+      "-A",
+      "trunk()",
+      "-B",
+      "merge",
+      "-r",
+      "@",
+    ]);
   });
 });

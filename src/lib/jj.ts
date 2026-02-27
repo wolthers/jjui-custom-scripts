@@ -2,7 +2,7 @@ import { execa } from "execa";
 
 export async function jj(
   args: string[],
-  options?: { cwd?: string }
+  options?: { cwd?: string },
 ): Promise<{ stdout: string; stderr: string }> {
   const result = await execa("jj", args, {
     cwd: options?.cwd ?? process.cwd(),
@@ -10,7 +10,7 @@ export async function jj(
   });
   if (result.failed) {
     throw new Error(
-      `jj ${args.join(" ")} failed: ${result.stderr || result.stdout || result.message}`
+      `jj ${args.join(" ")} failed: ${result.stderr || result.stdout || result.message}`,
     );
   }
   return { stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
@@ -18,7 +18,7 @@ export async function jj(
 
 export async function jjCapture(
   args: string[],
-  options?: { cwd?: string }
+  options?: { cwd?: string },
 ): Promise<string> {
   const { stdout } = await jj([...args, "--no-pager"], options);
   return stdout;

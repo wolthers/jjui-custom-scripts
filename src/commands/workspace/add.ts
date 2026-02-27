@@ -21,7 +21,7 @@ const ENV_FILE_EXCLUDES = [".example", ".sample", ".template"];
 const DEFAULT_SETUP_PROMPT = [
   "Set up this fresh workspace for development.",
   "Priorities:",
-  "1) Ensure relevant .env files exist for local development.",
+  "1) Ensure relevant environment files exist for local development.",
   "2) Run minimal setup commands needed to make the repo ready.",
   "3) Avoid destructive operations and keep changes focused to setup only.",
 ].join("\n");
@@ -36,16 +36,33 @@ const toWorkspacePath = (repoRoot: string, destination: string): string =>
   isAbsolute(destination) ? destination : resolve(repoRoot, destination);
 
 const isRelevantEnvFile = (name: string): boolean =>
-  ENV_FILE_PATTERN.test(name) && !ENV_FILE_EXCLUDES.some((suffix) => name.endsWith(suffix));
+  ENV_FILE_PATTERN.test(name) &&
+  !ENV_FILE_EXCLUDES.some((suffix) => name.endsWith(suffix));
 
-const openCursorAndWait = async (workspacePath: string, promptFilePath: string): Promise<void> => {
-  await execa("cursor", ["-n", workspacePath, promptFilePath, "--wait"], { stdio: "inherit" });
+const openCursorAndWait = async (
+  workspacePath: string,
+  promptFilePath: string,
+): Promise<void> => {
+  await execa("cursor", ["-n", workspacePath, promptFilePath, "--wait"], {
+    stdio: "inherit",
+  });
 };
 
-const runCursorAgent = async (workspacePath: string, prompt: string): Promise<void> => {
+const runCursorAgent = async (
+  workspacePath: string,
+  prompt: string,
+): Promise<void> => {
   await execa(
     "cursor",
-    ["agent", "--print", "--trust", "--force", "--workspace", workspacePath, prompt],
+    [
+      "agent",
+      "--print",
+      "--trust",
+      "--force",
+      "--workspace",
+      workspacePath,
+      prompt,
+    ],
     {
       cwd: workspacePath,
       stdio: "inherit",
@@ -53,7 +70,10 @@ const runCursorAgent = async (workspacePath: string, prompt: string): Promise<vo
   );
 };
 
-const copyRelevantEnvFiles = async (sourcePath: string, destinationPath: string): Promise<string[]> => {
+const copyRelevantEnvFiles = async (
+  sourcePath: string,
+  destinationPath: string,
+): Promise<string[]> => {
   const entries = await readdir(sourcePath, { withFileTypes: true });
   const envFiles = entries
     .filter((entry) => entry.isFile() && isRelevantEnvFile(entry.name))
@@ -70,7 +90,10 @@ const copyRelevantEnvFiles = async (sourcePath: string, destinationPath: string)
   return envFiles.toSorted();
 };
 
-const inferWorkspaceName = (workspacePath: string, explicitName?: string): string => {
+const inferWorkspaceName = (
+  workspacePath: string,
+  explicitName?: string,
+): string => {
   const name = explicitName?.trim();
   return name && name.length > 0 ? name : basename(workspacePath);
 };
@@ -78,15 +101,23 @@ const inferWorkspaceName = (workspacePath: string, explicitName?: string): strin
 export function registerWorkspaceAdd(workspace: Command): void {
   workspace
     .command("add <destination>")
-    .description("Create a jj workspace, prepare it, and run an initial Cursor task prompt")
-    .option("--name <name>", "Workspace name (defaults to destination basename)")
+    .description(
+      "Create a jj workspace, prepare it, and run an initial Cursor task prompt",
+    )
+    .option(
+      "--name <name>",
+      "Workspace name (defaults to destination basename)",
+    )
     .option(
       "-r, --revision <rev>",
-      "Parent revision for the new workspace (repeatable)",
+      "Parent change/revision for the new workspace (default: trunk())",
       (value: string, previous: string[]) => [...previous, value],
       [],
     )
-    .option("-m, --message <message>", "Working-copy change description for the new workspace")
+    .option(
+      "-m, --message <message>",
+      "Working-copy change description for the new workspace",
+    )
     .option(
       "--sparse-patterns <mode>",
       "Sparse mode for jj workspace add: copy, full, or empty",
@@ -97,8 +128,16 @@ export function registerWorkspaceAdd(workspace: Command): void {
       "Path (relative to workspace root) to the task prompt file",
       DEFAULT_PROMPT_FILE,
     )
-    .option("--skip-setup-agent", "Skip running the initial Cursor setup agent", false)
-    .option("--skip-task-agent", "Skip running Cursor agent for the task prompt", false)
+    .option(
+      "--skip-setup-agent",
+      "Skip running the initial Cursor setup agent",
+      false,
+    )
+    .option(
+      "--skip-task-agent",
+      "Skip running Cursor agent for the task prompt",
+      false,
+    )
     .action(async (destination: string, opts: WorkspaceAddOptions) => {
       const repoRoot = (await jjCapture(["root"])).trim();
       const workspacePath = toWorkspacePath(repoRoot, destination);
@@ -108,7 +147,9 @@ export function registerWorkspaceAdd(workspace: Command): void {
       if (opts.name?.trim()) {
         args.push("--name", opts.name.trim());
       }
-      for (const revision of opts.revision ?? []) {
+      const parents =
+        (opts.revision ?? []).length > 0 ? opts.revision! : ["trunk()"];
+      for (const revision of parents) {
         args.push("-r", revision);
       }
       if (opts.message?.trim()) {
@@ -119,7 +160,10 @@ export function registerWorkspaceAdd(workspace: Command): void {
       }
       await jj(args, { cwd: repoRoot });
 
-      const copiedEnvFiles = await copyRelevantEnvFiles(repoRoot, workspacePath);
+      const copiedEnvFiles = await copyRelevantEnvFiles(
+        repoRoot,
+        workspacePath,
+      );
       if (copiedEnvFiles.length > 0) {
         console.log(`Copied env files: ${copiedEnvFiles.join(", ")}`);
       } else {
@@ -130,13 +174,18 @@ export function registerWorkspaceAdd(workspace: Command): void {
         await runCursorAgent(workspacePath, DEFAULT_SETUP_PROMPT);
       }
 
-      const promptFilePath = join(workspacePath, opts.promptFile ?? DEFAULT_PROMPT_FILE);
+      const promptFilePath = join(
+        workspacePath,
+        opts.promptFile ?? DEFAULT_PROMPT_FILE,
+      );
       await writeFile(promptFilePath, DEFAULT_TASK_FILE_TEMPLATE, "utf8");
       await openCursorAndWait(workspacePath, promptFilePath);
 
       const taskPrompt = (await readFile(promptFilePath, "utf8")).trim();
       if (taskPrompt.length === 0) {
-        console.warn(`Prompt file '${promptFilePath}' was empty. Skipping task agent.`);
+        console.warn(
+          `Prompt file '${promptFilePath}' was empty. Skipping task agent.`,
+        );
       } else if (!opts.skipTaskAgent) {
         await runCursorAgent(workspacePath, taskPrompt);
       }

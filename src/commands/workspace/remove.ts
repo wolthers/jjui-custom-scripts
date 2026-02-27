@@ -19,8 +19,15 @@ export function registerWorkspaceRemove(workspace: Command): void {
   workspace
     .command("remove <name>")
     .description("Forget a jj workspace and delete its directory")
-    .option("-p, --path <path>", "Workspace path to delete (optional if tracked by this CLI)")
-    .option("--keep-files", "Forget the workspace but keep files on disk", false)
+    .option(
+      "-p, --path <path>",
+      "Workspace path to delete (optional if tracked by this CLI)",
+    )
+    .option(
+      "--keep-files",
+      "Forget the workspace but keep files on disk",
+      false,
+    )
     .action(async (name: string, opts: WorkspaceRemoveOptions) => {
       const repoRoot = (await jjCapture(["root"])).trim();
       const workspaceName = name.trim();

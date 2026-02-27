@@ -65,11 +65,12 @@ Guidance for AI coding agents working in this repository.
 
 ## Validation checklist for agents
 
-Run the smallest useful set based on your change:
+After each turn, run:
 
-1. `pnpm lint`
-2. `pnpm typecheck`
-3. `pnpm build`
+1. `pnpm run format`
+2. `pnpm run typecheck`
+3. `pnpm run lint:fix`
+4. `pnpm run test`
 
 For command behavior changes, also run targeted command smoke checks via:
 
