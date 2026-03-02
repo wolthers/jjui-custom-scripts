@@ -148,6 +148,20 @@ describe("pr sync", () => {
     vi.clearAllMocks();
   });
 
+  it("exits 1 when stdin is not a TTY and --yes not passed", async () => {
+    const orig = process.stdin.isTTY;
+    process.stdin.isTTY = false;
+    try {
+      const program = programWithPr();
+      const result = await runCli(program, cliArgs("pr", "sync"));
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("requires a TTY");
+      expect(result.stderr).toContain("--yes");
+    } finally {
+      process.stdin.isTTY = orig;
+    }
+  });
+
   it("exits 0 with --yes when graph is empty and no open PRs", async () => {
     vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
     vi.mocked(jjLib.jjCapture)

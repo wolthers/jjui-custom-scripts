@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   forgetWorkspaceRecord,
+  listWorkspaceNames,
   lookupWorkspacePath,
   rememberWorkspace,
 } from "./registry.js";
@@ -31,6 +32,26 @@ describe("workspace registry", () => {
     try {
       const path = await lookupWorkspacePath(repoRoot, "any");
       expect(path).toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("listWorkspaceNames returns sorted names", async () => {
+    makeRepo();
+    try {
+      await rememberWorkspace({
+        repoRoot,
+        workspace: "z-last",
+        path: "/path/z",
+      });
+      await rememberWorkspace({
+        repoRoot,
+        workspace: "a-first",
+        path: "/path/a",
+      });
+      const names = await listWorkspaceNames(repoRoot);
+      expect(names).toEqual(["a-first", "z-last"]);
     } finally {
       cleanup();
     }

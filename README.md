@@ -21,8 +21,9 @@ Then point your jj/jjui config at the built binary (see [Configuration](#configu
 - **`jj-scripts pr sync [-y|--yes]`** — Sync PRs to the branch stack: ensure a PR exists for each branch (create if missing, with prompt unless `--yes`), update base branch when the stack changed, and add/update “part of a stack” comments on each PR.
 - **`jj-scripts stack integrate -r <rev>`** — Rebase the given revision onto `trunk()` then merge (integrate into a mega merge).
 - **`jj-scripts stack restack`** — Run `jj simplify-parents` then rebase mutable roots onto `trunk()`.
-- **`jj-scripts workspace add <destination> [--name <name>] [-r <rev>]`** — Create a new jj workspace branching from the given revision (default: `trunk()`), copy relevant `.env*` files, run an initial setup prompt via Cursor Agent, open a task prompt file in Cursor (`--wait`), then optionally run Cursor Agent with that prompt.
-- **`jj-scripts workspace remove <name> [--path <path>]`** — Forget the workspace with `jj workspace forget` and delete its folder (path from tracking metadata or `--path`).
+- **`jj-scripts workspace add [destination] [--name <name>] [--prefix <prefix>] [-r <rev>]`** — Create a new jj workspace. The new workspace path is a **sibling** of the current directory (e.g. from `web-main` you get `../workspace-foo`). If `destination` is omitted and stdin is a TTY, prompts for a name (prefixed with `workspace-`). Then: copy `.env*`, run Cursor setup agent, open task prompt, etc.
+- **`jj-scripts workspace list`** — List registered workspace names (one per line).
+- **`jj-scripts workspace remove [name] [--path <path>]`** — Forget a workspace and delete its folder. If `name` is omitted and stdin is a TTY, lists workspaces and prompts to pick by number or name.
 
 Requires `jj` and `gh` on your PATH.
 
@@ -51,6 +52,18 @@ show = "interactive"
 [custom_commands.create-pr]
 desc = "Create draft PR (or view existing)"
 args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "pr", "create", "--change-id", "$change_id"]
+show = "interactive"
+
+# Workspace add: with show = "interactive" the CLI prompts for a name (prefixed with workspace-) when no destination is passed
+[custom_commands.workspace-add]
+desc = "Add jj workspace"
+args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "workspace", "add"]
+show = "interactive"
+
+# Workspace remove: the CLI lists workspaces and prompts to pick one when no name is passed
+[custom_commands.workspace-remove]
+desc = "Remove jj workspace"
+args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "workspace", "remove"]
 show = "interactive"
 ```
 

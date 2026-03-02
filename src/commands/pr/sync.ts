@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import type { Command } from "commander";
+import { exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
 import type { PrListItem } from "./common.js";
 import { listOpenPrs, resolveBaseBranch } from "./common.js";
@@ -22,8 +23,7 @@ function* walkBranches(
 
 function confirm(question: string, defaultYes: boolean): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const defaultChar = defaultYes ? "Y" : "n";
-  const prompt = `${question} (${defaultChar}/n): `;
+  const prompt = defaultYes ? `${question} (Y/n): ` : `${question} (y/N): `;
   return new Promise((resolve) => {
     rl.question(prompt, (answer) => {
       rl.close();
@@ -203,6 +203,12 @@ export const registerSync = (pr: Command): void => {
     )
     .option("-y, --yes", "Create missing PRs without prompting")
     .action(async (opts: SyncOptions) => {
+      if (!process.stdin.isTTY && !opts.yes) {
+        exitWith(
+          1,
+          "pr sync requires a TTY to prompt, or pass --yes to create missing PRs without prompting.",
+        );
+      }
       await runSync(process.cwd(), opts);
     });
 };
