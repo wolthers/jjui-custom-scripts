@@ -105,39 +105,71 @@ const generatePrBodyWithCursor = async (args: {
     args.template,
   ].join("\n");
 
-  const result = await execa(
-    "cursor",
-    ["agent", "--print", "--mode", "ask", "--output-format", "text", prompt],
-    { cwd: process.cwd() },
-  );
-  const output = result.stdout.trim();
-  if (!output) {
-    throw new Error("Cursor CLI returned an empty PR description.");
+  const CURSOR_TIMEOUT_MS = 120_000;
+  try {
+    const result = await execa(
+      "cursor",
+      ["agent", "--print", "--mode", "ask", "--output-format", "text", prompt],
+      { cwd: process.cwd(), timeout: CURSOR_TIMEOUT_MS },
+    );
+    const output = result.stdout.trim();
+    if (!output) {
+      throw new Error("Cursor CLI returned an empty PR description.");
+    }
+    return output;
+  } catch (err) {
+    const timedOut =
+      err &&
+      typeof err === "object" &&
+      "timedOut" in err &&
+      (err as { timedOut?: boolean }).timedOut;
+    if (timedOut) {
+      throw new Error(
+        `Cursor agent did not respond within ${CURSOR_TIMEOUT_MS / 1000}s.`,
+        { cause: err },
+      );
+    }
+    throw err;
   }
-  return output;
 };
+
+const EDITOR_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 const openEditorAndWait = async (filePath: string): Promise<void> => {
   const editor = process.env.VISUAL ?? process.env.EDITOR;
-  if (editor) {
-    const escapedPath = filePath.replace(/"/g, '\\"');
-    await execa("sh", ["-lc", `${editor} "${escapedPath}"`], {
-      stdio: "inherit",
-    });
-    return;
-  }
+  const timeoutOpt = { stdio: "inherit" as const, timeout: EDITOR_TIMEOUT_MS };
+  try {
+    if (editor) {
+      const escapedPath = filePath.replace(/"/g, '\\"');
+      await execa("sh", ["-lc", `${editor} "${escapedPath}"`], timeoutOpt);
+      return;
+    }
 
-  if (process.platform === "darwin") {
-    await execa("open", ["-W", "-t", filePath], { stdio: "inherit" });
-    return;
-  }
+    if (process.platform === "darwin") {
+      await execa("open", ["-W", "-t", filePath], timeoutOpt);
+      return;
+    }
 
-  if (process.platform === "win32") {
-    await execa("notepad", [filePath], { stdio: "inherit" });
-    return;
-  }
+    if (process.platform === "win32") {
+      await execa("notepad", [filePath], timeoutOpt);
+      return;
+    }
 
-  await execa("vi", [filePath], { stdio: "inherit" });
+    await execa("vi", [filePath], timeoutOpt);
+  } catch (err) {
+    const timedOut =
+      err &&
+      typeof err === "object" &&
+      "timedOut" in err &&
+      (err as { timedOut?: boolean }).timedOut;
+    if (timedOut) {
+      throw new Error(
+        `Editor did not complete within ${EDITOR_TIMEOUT_MS / 60_000} minutes. Save and close the file, then run pr create again.`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
 };
 
 export const createDraftPr = async (
