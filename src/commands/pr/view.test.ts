@@ -7,7 +7,7 @@ import { EXIT_GH, EXIT_NO_BOOKMARK } from "../../lib/errors.js";
 vi.mock("../../lib/jj.js", async () => {
   const mod =
     await vi.importActual<typeof import("../../lib/jj.js")>("../../lib/jj.js");
-  return { ...mod, jjCapture: vi.fn() };
+  return { ...mod, jj: vi.fn(), jjCapture: vi.fn() };
 });
 vi.mock("../../lib/gh.js", () => ({
   gh: vi.fn(),
@@ -106,5 +106,103 @@ describe("pr create", () => {
       "feature-branch",
       "--web",
     ]);
+  });
+});
+
+describe("pr graph", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("prints DOT when no --out and graph is empty", async () => {
+    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
+    vi.mocked(jjLib.jjCapture)
+      .mockResolvedValueOnce("rootRev\n")
+      .mockResolvedValueOnce("");
+
+    const program = programWithPr();
+    const result = await runCli(program, cliArgs("pr", "graph"));
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("digraph Branches");
+    expect(result.stdout).toContain("}");
+  });
+
+  it("prints DOT with edges when root has children", async () => {
+    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
+    vi.mocked(jjLib.jjCapture)
+      .mockResolvedValueOnce("rootRev\n")
+      .mockResolvedValueOnce("c1 feature-a\n")
+      .mockResolvedValueOnce("");
+
+    const program = programWithPr();
+    const result = await runCli(program, cliArgs("pr", "graph"));
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('"main" -> "feature-a"');
+  });
+});
+
+describe("pr sync", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("exits 0 with --yes when graph is empty and no open PRs", async () => {
+    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
+    vi.mocked(jjLib.jjCapture)
+      .mockResolvedValueOnce("rootRev\n")
+      .mockResolvedValueOnce("");
+    vi.mocked(ghLib.gh).mockResolvedValue({ stdout: "[]", stderr: "" });
+
+    const program = programWithPr();
+    const result = await runCli(program, cliArgs("pr", "sync", "--yes"));
+
+    expect(result.exitCode).toBe(0);
+    expect(ghLib.gh).toHaveBeenCalledWith(
+      [
+        "pr",
+        "list",
+        "--state",
+        "open",
+        "--json",
+        "number,headRefName,baseRefName,body,url",
+      ],
+      expect.anything(),
+    );
+  });
+
+  it("updates PR base when branch has PR with wrong base", async () => {
+    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
+    vi.mocked(jjLib.jjCapture)
+      .mockResolvedValueOnce("rootRev\n")
+      .mockResolvedValueOnce("c1 feature-a\n")
+      .mockResolvedValueOnce("");
+    const prList = [
+      {
+        number: 42,
+        headRefName: "feature-a",
+        baseRefName: "dev",
+        body: "",
+        url: "https://github.com/o/r/pull/42",
+      },
+    ];
+    vi.mocked(ghLib.gh)
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify(prList),
+        stderr: "",
+      })
+      .mockResolvedValueOnce({ stdout: "", stderr: "" }) // pr edit --base
+      .mockResolvedValueOnce({ stdout: '{"body": ""}', stderr: "" }) // pr view --json body
+      .mockResolvedValueOnce({ stdout: "", stderr: "" }); // pr edit --body-file
+
+    const program = programWithPr();
+    const result = await runCli(program, cliArgs("pr", "sync", "--yes"));
+
+    expect(result.exitCode).toBe(0);
+    expect(ghLib.gh).toHaveBeenCalledWith(
+      ["pr", "edit", "42", "--base", "main"],
+      expect.anything(),
+    );
   });
 });

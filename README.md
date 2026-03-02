@@ -17,6 +17,8 @@ Then point your jj/jjui config at the built binary (see [Configuration](#configu
 
 - **`jj-scripts pr view --change-id <id>`** — Resolve the bookmark for the given change and open its PR on GitHub in the browser. If the bookmark has no PR, parses a `(#number)` reference from the change description and opens that PR by number.
 - **`jj-scripts pr create --change-id <id>`** — Try to view an existing PR first; if none exists, generate a PR body with Cursor CLI, open it in your editor, then create a draft PR and open it.
+- **`jj-scripts pr graph [-o file.png]`** — Build the branch stack graph from current main (or dev) only and output DOT; with `-o`/`--out`, render to PNG (requires `dot` on PATH).
+- **`jj-scripts pr sync [-y|--yes]`** — Sync PRs to the branch stack: ensure a PR exists for each branch (create if missing, with prompt unless `--yes`), update base branch when the stack changed, and add/update “part of a stack” comments on each PR.
 - **`jj-scripts stack integrate -r <rev>`** — Rebase the given revision onto `trunk()` then merge (integrate into a mega merge).
 - **`jj-scripts stack restack`** — Run `jj simplify-parents` then rebase mutable roots onto `trunk()`.
 - **`jj-scripts workspace add <destination> [--name <name>] [-r <rev>]`** — Create a new jj workspace branching from the given revision (default: `trunk()`), copy relevant `.env*` files, run an initial setup prompt via Cursor Agent, open a task prompt file in Cursor (`--wait`), then optionally run Cursor Agent with that prompt.

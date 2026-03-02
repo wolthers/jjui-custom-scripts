@@ -1,6 +1,6 @@
 import { EXIT_NO_BOOKMARK, exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
-import { jjCapture, splitLines } from "../../lib/jj.js";
+import { jj, jjCapture, splitLines } from "../../lib/jj.js";
 
 export type PrOptions = { changeId: string };
 
@@ -11,6 +11,40 @@ const normalizeBookmark = (bookmark: string): string =>
 
 export const getFirstLine = (text: string): string | undefined =>
   splitLines(text)[0];
+
+/** Root branch for stacks: dev if it exists, else main. */
+export const resolveBaseBranch = async (cwd: string): Promise<string> => {
+  try {
+    await jj(["show", "dev"], { cwd });
+    return "dev";
+  } catch {
+    return "main";
+  }
+};
+
+export type PrListItem = {
+  number: number;
+  headRefName: string;
+  baseRefName: string;
+  body: string | null;
+  url: string | null;
+};
+
+export async function listOpenPrs(cwd: string): Promise<PrListItem[]> {
+  const { stdout } = await gh(
+    [
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--json",
+      "number,headRefName,baseRefName,body,url",
+    ],
+    { cwd },
+  );
+  const raw = JSON.parse(stdout.trim()) as PrListItem[];
+  return Array.isArray(raw) ? raw : [];
+}
 
 /** Parses the first (#number) PR reference from a commit/PR message. */
 const PR_REF_RE = /\(#(\d+)\)/;
