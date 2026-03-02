@@ -9,6 +9,8 @@ pnpm install
 pnpm build
 ```
 
+Test
+
 Then point your jj/jjui config at the built binary (see [Configuration](#configuration)).
 
 ## Usage
