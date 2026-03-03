@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { registerWorkspaceAdd } from "./add.js";
+import { registerWorkspaceList } from "./list.js";
 import { registerWorkspaceRemove } from "./remove.js";
 
 export const registerWorkspace = (program: Command): void => {
@@ -7,5 +8,6 @@ export const registerWorkspace = (program: Command): void => {
     .command("workspace")
     .description("Manage jj workspaces");
   registerWorkspaceAdd(workspace);
+  registerWorkspaceList(workspace);
   registerWorkspaceRemove(workspace);
 };

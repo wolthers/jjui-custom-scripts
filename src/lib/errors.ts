@@ -1,4 +1,3 @@
-export const EXIT_NO_CHANGE = 2;
 export const EXIT_NO_BOOKMARK = 3;
 export const EXIT_JJ = 4;
 export const EXIT_GH = 5;

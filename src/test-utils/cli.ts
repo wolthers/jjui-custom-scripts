@@ -85,6 +85,7 @@ export async function runCli(
   const origError = console.error;
   const origWarn = console.warn;
   const origExit = process.exit;
+  const origStdoutWrite = process.stdout.write.bind(process.stdout);
 
   console.log = (...args: unknown[]) => {
     stdoutChunks.push(args.map(String).join(" "));
@@ -94,6 +95,20 @@ export async function runCli(
   };
   console.warn = (...args: unknown[]) => {
     stderrChunks.push(args.map(String).join(" "));
+  };
+  process.stdout.write = (
+    chunk: string | Uint8Array,
+    encoding?: BufferEncoding | ((err?: Error) => void),
+    callback?: (err?: Error) => void,
+  ): boolean => {
+    const str =
+      typeof chunk === "string"
+        ? chunk
+        : new TextDecoder().decode(chunk as Uint8Array);
+    if (str) stdoutChunks.push(str);
+    const cb = typeof encoding === "function" ? encoding : callback;
+    if (cb) queueMicrotask(() => cb());
+    return true;
   };
   process.exit = ((code?: number) => {
     throw new ExitIntercept(code === undefined ? 0 : code);
@@ -112,6 +127,7 @@ export async function runCli(
     console.log = origLog;
     console.error = origError;
     console.warn = origWarn;
+    process.stdout.write = origStdoutWrite;
     process.exit = origExit;
   }
 

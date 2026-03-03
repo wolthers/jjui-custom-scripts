@@ -10,11 +10,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
+import { exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
 import { jj, jjCapture } from "../../lib/jj.js";
 import type { PrOptions } from "./common.js";
 import {
   getFirstLine,
+  resolveBaseBranch,
   resolveRequiredBookmark,
   tryViewPrForChange,
   withChangeId,
@@ -25,7 +27,7 @@ const DEFAULT_PR_TEMPLATE = `## Summary
 ## Testing
 `;
 
-const readPullRequestTemplate = async (cwd: string): Promise<string> => {
+export const readPullRequestTemplate = async (cwd: string): Promise<string> => {
   const directCandidates = [
     ".github/pull_request_template.md",
     ".github/PULL_REQUEST_TEMPLATE.md",
@@ -61,7 +63,7 @@ const readPullRequestTemplate = async (cwd: string): Promise<string> => {
   return DEFAULT_PR_TEMPLATE;
 };
 
-const getPrTitle = async (
+export const getPrTitle = async (
   changeId: string,
   bookmark: string,
 ): Promise<string> => {
@@ -84,14 +86,89 @@ const getPrTitle = async (
   return bookmark;
 };
 
-const resolveBaseBranch = async (cwd: string): Promise<string> => {
-  try {
-    await jj(["show", "dev"], { cwd });
-    return "dev";
-  } catch {
-    return "main";
+export type CreateOneDraftPrOptions = { openInBrowser?: boolean };
+
+/**
+ * Push bookmark, then create a draft PR with the given body. Used by pr create and pr sync.
+ */
+export async function createOneDraftPr(
+  cwd: string,
+  base: string,
+  bookmark: string,
+  body: string,
+  options: CreateOneDraftPrOptions = {},
+): Promise<void> {
+  const { openInBrowser = true } = options;
+  const revset = `${base}..${bookmark}`;
+  const countStr = (
+    await jjCapture(["log", "--count", "-r", revset], { cwd })
+  ).trim();
+  const commitCount = Number.parseInt(countStr, 10) || 0;
+  if (commitCount === 0) {
+    exitWith(
+      1,
+      `No commits between ${base} and ${bookmark}. Commit your change in jj first, then create the PR.`,
+    );
   }
-};
+
+  const changeId = (
+    await jjCapture(["log", "-r", bookmark, "-T", "change_id", "--no-graph"], {
+      cwd,
+    })
+  ).trim();
+  const title = await getPrTitle(changeId, bookmark);
+
+  console.log("[pr create] Pushing branch %s...", bookmark);
+  try {
+    await jj(["git", "push", "--bookmark", bookmark], { cwd });
+  } catch (pushErr) {
+    const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+    if (
+      msg.includes("Non-tracking remote bookmark") &&
+      msg.includes("exists")
+    ) {
+      console.log(
+        "[pr create] Remote bookmark exists; tracking and retrying push...",
+      );
+      await jj(["bookmark", "track", bookmark, "--remote", "origin"], {
+        cwd,
+      });
+      await jj(["git", "push", "--bookmark", bookmark], { cwd });
+    } else {
+      throw pushErr;
+    }
+  }
+
+  const tempDirectory = await mkdtemp(join(tmpdir(), "jj-scripts-pr-"));
+  const bodyPath = join(tempDirectory, "pr-body.md");
+  try {
+    await writeFile(bodyPath, `${body}\n`, "utf8");
+    console.log("[pr create] Running gh pr create...");
+    await gh(
+      [
+        "pr",
+        "create",
+        "--draft",
+        "--base",
+        base,
+        "--head",
+        bookmark,
+        "--title",
+        title,
+        "--body-file",
+        bodyPath,
+      ],
+      { cwd },
+    );
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+
+  if (openInBrowser) {
+    console.log("[pr create] Opening PR in browser...");
+    await gh(["pr", "view", bookmark, "--web"], { cwd });
+  }
+}
 
 const CURSOR_HEALTH_CHECK_TIMEOUT_MS = 10_000; // 10 seconds
 
@@ -270,17 +347,6 @@ export const createDraftPr = async (
 ): Promise<void> => {
   const cwd = process.cwd();
   const base = await resolveBaseBranch(cwd);
-  const revset = `${base}..${bookmark}`;
-  const countStr = (
-    await jjCapture(["log", "--count", "-r", revset], { cwd })
-  ).trim();
-  const commitCount = Number.parseInt(countStr, 10) || 0;
-  if (commitCount === 0) {
-    throw new Error(
-      `No commits between ${base} and ${bookmark}. Commit your change in jj first, then create the PR.`,
-    );
-  }
-
   console.log("[pr create] Creating draft PR for bookmark %s...", bookmark);
   const title = await getPrTitle(changeId, bookmark);
   const template = await readPullRequestTemplate(cwd);
@@ -290,56 +356,18 @@ export const createDraftPr = async (
     title,
     template,
   });
-
   const tempDirectory = await mkdtemp(join(tmpdir(), "jj-scripts-pr-"));
   const bodyPath = join(tempDirectory, "pr-body.md");
-
   try {
     await writeFile(bodyPath, `${generatedBody}\n`, "utf8");
     await openEditorAndWait(bodyPath);
-    console.log("[pr create] Pushing branch %s...", bookmark);
-    try {
-      await jj(["git", "push", "--bookmark", bookmark], { cwd });
-    } catch (pushErr) {
-      const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
-      if (
-        msg.includes("Non-tracking remote bookmark") &&
-        msg.includes("exists")
-      ) {
-        console.log(
-          "[pr create] Remote bookmark exists; tracking and retrying push...",
-        );
-        await jj(["bookmark", "track", bookmark, "--remote", "origin"], {
-          cwd,
-        });
-        await jj(["git", "push", "--bookmark", bookmark], { cwd });
-      } else {
-        throw pushErr;
-      }
-    }
-    console.log("[pr create] Running gh pr create...");
-    await gh(
-      [
-        "pr",
-        "create",
-        "--draft",
-        "--base",
-        base,
-        "--head",
-        bookmark,
-        "--title",
-        title,
-        "--body-file",
-        bodyPath,
-      ],
-      { cwd },
-    );
+    const body = await readFile(bodyPath, "utf8");
+    await createOneDraftPr(cwd, base, bookmark, body.trim(), {
+      openInBrowser: true,
+    });
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }
-
-  console.log("[pr create] Opening PR in browser...");
-  await gh(["pr", "view", bookmark, "--web"], { cwd });
 };
 
 type CreateOptions = PrOptions & { checkCursor?: boolean };

@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { CliError, EXIT_GH } from "./errors.js";
 
 export async function gh(
   args: string[],
@@ -10,8 +11,9 @@ export async function gh(
     reject: false,
   });
   if (result.failed) {
-    throw new Error(
+    throw new CliError(
       `gh ${args.join(" ")} failed: ${result.stderr || result.stdout || result.message}`,
+      EXIT_GH,
     );
   }
   return { stdout: result.stdout ?? "", stderr: result.stderr ?? "" };

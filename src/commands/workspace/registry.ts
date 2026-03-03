@@ -77,6 +77,11 @@ export async function rememberWorkspace(params: {
   await saveRegistry(params.repoRoot, registry);
 }
 
+export async function listWorkspaceNames(repoRoot: string): Promise<string[]> {
+  const registry = await loadRegistry(repoRoot);
+  return Object.keys(registry.workspaces).toSorted();
+}
+
 export async function lookupWorkspacePath(
   repoRoot: string,
   workspace: string,

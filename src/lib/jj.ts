@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { CliError, EXIT_JJ } from "./errors.js";
 
 export async function jj(
   args: string[],
@@ -9,8 +10,9 @@ export async function jj(
     reject: false,
   });
   if (result.failed) {
-    throw new Error(
+    throw new CliError(
       `jj ${args.join(" ")} failed: ${result.stderr || result.stdout || result.message}`,
+      EXIT_JJ,
     );
   }
   return { stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
