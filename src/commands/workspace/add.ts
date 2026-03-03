@@ -53,7 +53,7 @@ const toWorkspacePath = (destination: string, repoRoot: string): string =>
     ? destination
     : resolve(dirname(repoRoot), destination);
 
-const isRelevantEnvFile = (name: string): boolean =>
+export const isRelevantEnvFile = (name: string): boolean =>
   ENV_FILE_PATTERN.test(name) &&
   !ENV_FILE_EXCLUDES.some((suffix) => name.endsWith(suffix));
 

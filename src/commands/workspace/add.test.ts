@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cliArgs, programWithWorkspace, runCli } from "../../test-utils/cli.js";
 import * as jjLib from "../../lib/jj.js";
 import * as registryLib from "./registry.js";
-import { getSetupPrompt } from "./add.js";
+import { getSetupPrompt, isRelevantEnvFile } from "./add.js";
 import { execa } from "execa";
 
 vi.mock("../../lib/jj.js", async () => {
@@ -22,6 +22,38 @@ vi.mock("./registry.js", () => ({
 vi.mock("../../lib/prompt.js", () => ({
   promptLine: vi.fn().mockResolvedValue(""),
 }));
+
+describe("isRelevantEnvFile", () => {
+  it("matches .env", () => {
+    expect(isRelevantEnvFile(".env")).toBe(true);
+  });
+
+  it("matches .env.local", () => {
+    expect(isRelevantEnvFile(".env.local")).toBe(true);
+  });
+
+  it("matches .env.production", () => {
+    expect(isRelevantEnvFile(".env.production")).toBe(true);
+  });
+
+  it("excludes .env.example", () => {
+    expect(isRelevantEnvFile(".env.example")).toBe(false);
+  });
+
+  it("excludes .env.sample", () => {
+    expect(isRelevantEnvFile(".env.sample")).toBe(false);
+  });
+
+  it("excludes .env.template", () => {
+    expect(isRelevantEnvFile(".env.template")).toBe(false);
+  });
+
+  it("rejects non-env files", () => {
+    expect(isRelevantEnvFile("package.json")).toBe(false);
+    expect(isRelevantEnvFile(".gitignore")).toBe(false);
+    expect(isRelevantEnvFile("env")).toBe(false);
+  });
+});
 
 describe("getSetupPrompt", () => {
   it("returns interactive prompt when tty is true (no non-interactive instruction)", () => {

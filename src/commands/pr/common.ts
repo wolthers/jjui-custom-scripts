@@ -1,6 +1,6 @@
 import { EXIT_NO_BOOKMARK, exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
-import { jj, jjCapture, splitLines } from "../../lib/jj.js";
+import { jjCapture, splitLines } from "../../lib/jj.js";
 
 export type PrOptions = { changeId: string };
 
@@ -15,7 +15,7 @@ export const getFirstLine = (text: string): string | undefined =>
 /** Root branch for stacks: dev if it exists, else main. */
 export const resolveBaseBranch = async (cwd: string): Promise<string> => {
   try {
-    await jj(["show", "dev"], { cwd });
+    await jjCapture(["log", "-r", "dev", "-T", "''", "--no-graph"], { cwd });
     return "dev";
   } catch {
     return "main";

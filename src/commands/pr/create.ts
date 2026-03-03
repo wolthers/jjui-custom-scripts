@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
+import { exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
 import { jj, jjCapture } from "../../lib/jj.js";
 import type { PrOptions } from "./common.js";
@@ -104,7 +105,8 @@ export async function createOneDraftPr(
   ).trim();
   const commitCount = Number.parseInt(countStr, 10) || 0;
   if (commitCount === 0) {
-    throw new Error(
+    exitWith(
+      1,
       `No commits between ${base} and ${bookmark}. Commit your change in jj first, then create the PR.`,
     );
   }

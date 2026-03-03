@@ -115,8 +115,8 @@ describe("pr graph", () => {
   });
 
   it("prints DOT when no --out and graph is empty", async () => {
-    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
     vi.mocked(jjLib.jjCapture)
+      .mockRejectedValueOnce(new Error("no dev"))
       .mockResolvedValueOnce("rootRev\n")
       .mockResolvedValueOnce("");
 
@@ -129,8 +129,8 @@ describe("pr graph", () => {
   });
 
   it("prints DOT with edges when root has children", async () => {
-    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
     vi.mocked(jjLib.jjCapture)
+      .mockRejectedValueOnce(new Error("no dev"))
       .mockResolvedValueOnce("rootRev\n")
       .mockResolvedValueOnce("c1 feature-a\n")
       .mockResolvedValueOnce("");
@@ -163,8 +163,8 @@ describe("pr sync", () => {
   });
 
   it("exits 0 with --yes when graph is empty and no open PRs", async () => {
-    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
     vi.mocked(jjLib.jjCapture)
+      .mockRejectedValueOnce(new Error("no dev"))
       .mockResolvedValueOnce("rootRev\n")
       .mockResolvedValueOnce("");
     vi.mocked(ghLib.gh).mockResolvedValue({ stdout: "[]", stderr: "" });
@@ -187,8 +187,8 @@ describe("pr sync", () => {
   });
 
   it("updates PR base when branch has PR with wrong base", async () => {
-    vi.mocked(jjLib.jj).mockRejectedValue(new Error("no dev"));
     vi.mocked(jjLib.jjCapture)
+      .mockRejectedValueOnce(new Error("no dev"))
       .mockResolvedValueOnce("rootRev\n")
       .mockResolvedValueOnce("c1 feature-a\n")
       .mockResolvedValueOnce("");

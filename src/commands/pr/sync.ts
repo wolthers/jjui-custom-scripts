@@ -1,7 +1,10 @@
-import { createInterface } from "node:readline";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Command } from "commander";
 import { exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
+import { confirmLine } from "../../lib/prompt.js";
 import type { PrListItem } from "./common.js";
 import { listOpenPrs, resolveBaseBranch } from "./common.js";
 import { createOneDraftPr, readPullRequestTemplate } from "./create.js";
@@ -21,23 +24,7 @@ function* walkBranches(
   }
 }
 
-function confirm(question: string, defaultYes: boolean): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const prompt = defaultYes ? `${question} (Y/n): ` : `${question} (y/N): `;
-  return new Promise((resolve) => {
-    rl.question(prompt, (answer) => {
-      rl.close();
-      const normalized = answer.trim().toLowerCase();
-      if (normalized === "") {
-        resolve(defaultYes);
-        return;
-      }
-      resolve(normalized === "y" || normalized === "yes");
-    });
-  });
-}
-
-function stripSyncBlock(body: string | null): string {
+export function stripSyncBlock(body: string | null): string {
   if (!body || typeof body !== "string") {
     return "";
   }
@@ -52,7 +39,9 @@ function stripSyncBlock(body: string | null): string {
   return after ? `${before}\n\n${after}` : before;
 }
 
-function buildStackBlock(entries: { branch: string; url: string }[]): string {
+export function buildStackBlock(
+  entries: { branch: string; url: string }[],
+): string {
   const lines = [
     SYNC_BLOCK_START,
     "",
@@ -80,9 +69,6 @@ async function updatePrBody(
   body: string,
   cwd: string,
 ): Promise<void> {
-  const { writeFile, mkdtemp, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
   const dir = await mkdtemp(join(tmpdir(), "jj-scripts-sync-"));
   const path = join(dir, "body.md");
   try {
@@ -124,7 +110,7 @@ async function runSync(cwd: string, options: SyncOptions): Promise<void> {
     } else {
       const shouldCreate =
         options.yes ||
-        (await confirm(
+        (await confirmLine(
           `PR from ${target} <- ${branch} doesn't exist. Create it?`,
           true,
         ));
