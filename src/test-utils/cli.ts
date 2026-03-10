@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { registerAiImplement } from "../commands/ai-implement.js";
 import { registerPing } from "../commands/ping.js";
 import { registerPr } from "../commands/pr/index.js";
 import { registerStack } from "../commands/stack/index.js";
@@ -52,6 +53,15 @@ export function programWithPing(): Command {
 }
 
 /**
+ * Program with only the ai-implement command registered.
+ */
+export function programWithAiImplement(): Command {
+  const program = createProgram();
+  registerAiImplement(program);
+  return program;
+}
+
+/**
  * Full program with all command groups (mirrors cli.ts). Use for integration/wiring tests.
  */
 export function programWithAll(): Command {
@@ -60,6 +70,7 @@ export function programWithAll(): Command {
   registerPr(program);
   registerStack(program);
   registerWorkspace(program);
+  registerAiImplement(program);
   return program;
 }
 

@@ -2,7 +2,7 @@ import { EXIT_NO_BOOKMARK, exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
 import { jjCapture, splitLines } from "../../lib/jj.js";
 
-export type PrOptions = { changeId: string };
+export type PrOptions = { changeId?: string | undefined };
 
 const NO_BOOKMARK_MESSAGE = "No bookmark found for selected change";
 
@@ -165,4 +165,9 @@ export const tryViewPrForChange = async (
   return opened;
 };
 
-export const withChangeId = (opts: PrOptions): string => opts.changeId.trim();
+export const withChangeId = (opts: PrOptions): string => {
+  if (!opts.changeId?.trim()) {
+    exitWith(1, "--change-id is required");
+  }
+  return opts.changeId.trim();
+};

@@ -1,13 +1,20 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { exitWith } from "../../lib/errors.js";
 import { gh } from "../../lib/gh.js";
+import { jjCapture } from "../../lib/jj.js";
 import { confirmLine } from "../../lib/prompt.js";
 import type { PrListItem } from "./common.js";
 import { listOpenPrs, resolveBaseBranch } from "./common.js";
-import { createOneDraftPr, readPullRequestTemplate } from "./create.js";
+import { openEditorAndWait } from "../../lib/editor.js";
+import {
+  createOneDraftPr,
+  generatePrBody,
+  getPrTitle,
+  readPullRequestTemplate,
+} from "./create.js";
 import { buildBranchGraph } from "./graph.js";
 
 const SYNC_BLOCK_START = "<!-- jj-scripts-sync -->";
@@ -93,48 +100,88 @@ async function runSync(cwd: string, options: SyncOptions): Promise<void> {
 
   /* oxlint-disable no-await-in-loop -- sequential: prompt and prByHead updates per branch */
   for (const [branch, target] of walkBranches(graph, root)) {
-    const pr = prByHead.get(branch);
-    if (pr) {
-      if (pr.baseRefName !== target) {
-        console.log(
-          "[pr sync] Updating PR #%d base %s <- %s to %s <- %s",
-          pr.number,
-          pr.baseRefName,
-          branch,
-          target,
-          branch,
+    try {
+      const pr = prByHead.get(branch);
+      if (pr) {
+        if (pr.baseRefName !== target) {
+          console.log(
+            "[pr sync] Updating PR #%d base %s <- %s to %s <- %s",
+            pr.number,
+            pr.baseRefName,
+            branch,
+            target,
+            branch,
+          );
+          await gh(["pr", "edit", String(pr.number), "--base", target], {
+            cwd,
+          });
+          pr.baseRefName = target;
+        }
+      } else {
+        const shouldCreate =
+          options.yes ||
+          (await confirmLine(
+            `PR from ${target} <- ${branch} doesn't exist. Create it?`,
+            true,
+          ));
+        if (!shouldCreate) {
+          console.log("[pr sync] Skipping create for %s <- %s", target, branch);
+          continue;
+        }
+
+        const changeId = (
+          await jjCapture(
+            ["log", "-r", branch, "-T", "change_id", "--no-graph"],
+            { cwd },
+          )
+        ).trim();
+        const title = await getPrTitle(changeId, branch);
+        const template = await readPullRequestTemplate(cwd);
+        let body =
+          (await generatePrBody({
+            changeId,
+            bookmark: branch,
+            title,
+            template,
+          })) ?? "";
+        if (body.length === 0) {
+          console.warn(
+            "[pr sync] No agent available or empty body for %s; using template.",
+            branch,
+          );
+          body = template;
+        }
+
+        const editDir = await mkdtemp(join(tmpdir(), "jj-scripts-sync-body-"));
+        const editPath = join(editDir, `${branch}.md`);
+        try {
+          await writeFile(editPath, `${body}\n`, "utf8");
+          await openEditorAndWait(editPath, { logPrefix: "pr sync" });
+          body = (await readFile(editPath, "utf8")).trim();
+        } finally {
+          await rm(editDir, { recursive: true, force: true });
+        }
+
+        await createOneDraftPr(cwd, target, branch, body, {
+          openInBrowser: false,
+        });
+        const { stdout } = await gh(
+          [
+            "pr",
+            "view",
+            branch,
+            "--json",
+            "number,headRefName,baseRefName,body,url",
+          ],
+          { cwd },
         );
-        await gh(["pr", "edit", String(pr.number), "--base", target], { cwd });
-        pr.baseRefName = target;
+        const newPr = JSON.parse(stdout.trim()) as PrListItem;
+        pulls.push(newPr);
+        prByHead.set(branch, newPr);
       }
-    } else {
-      const shouldCreate =
-        options.yes ||
-        (await confirmLine(
-          `PR from ${target} <- ${branch} doesn't exist. Create it?`,
-          true,
-        ));
-      if (!shouldCreate) {
-        console.log("[pr sync] Skipping create for %s <- %s", target, branch);
-        continue;
-      }
-      const template = await readPullRequestTemplate(cwd);
-      await createOneDraftPr(cwd, target, branch, template, {
-        openInBrowser: false,
-      });
-      const { stdout } = await gh(
-        [
-          "pr",
-          "view",
-          branch,
-          "--json",
-          "number,headRefName,baseRefName,body,url",
-        ],
-        { cwd },
-      );
-      const newPr = JSON.parse(stdout.trim()) as PrListItem;
-      pulls.push(newPr);
-      prByHead.set(branch, newPr);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[pr sync] Error processing %s: %s", branch, msg);
     }
   }
   /* oxlint-enable no-await-in-loop */

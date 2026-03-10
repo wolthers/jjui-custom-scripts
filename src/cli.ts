@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { registerAiImplement } from "./commands/ai-implement.js";
 import { registerPing } from "./commands/ping.js";
 import { registerPr } from "./commands/pr/index.js";
 import { registerStack } from "./commands/stack/index.js";
@@ -16,6 +17,7 @@ registerPing(program);
 registerPr(program);
 registerStack(program);
 registerWorkspace(program);
+registerAiImplement(program);
 
 async function main(): Promise<void> {
   try {
