@@ -1,4 +1,3 @@
-import { execa } from "execa";
 import {
   access,
   mkdtemp,
@@ -10,7 +9,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Command } from "commander";
-import { exitWith } from "../../lib/errors.js";
+import { resolveAgentCommand, runPrintAgent } from "../../lib/agent.js";
+import { CliError } from "../../lib/errors.js";
+import { openEditorAndWait } from "../../lib/editor.js";
 import { gh } from "../../lib/gh.js";
 import { jj, jjCapture } from "../../lib/jj.js";
 import type { PrOptions } from "./common.js";
@@ -105,8 +106,7 @@ export async function createOneDraftPr(
   ).trim();
   const commitCount = Number.parseInt(countStr, 10) || 0;
   if (commitCount === 0) {
-    exitWith(
-      1,
+    throw new CliError(
       `No commits between ${base} and ${bookmark}. Commit your change in jj first, then create the PR.`,
     );
   }
@@ -170,73 +170,18 @@ export async function createOneDraftPr(
   }
 }
 
-const CURSOR_HEALTH_CHECK_TIMEOUT_MS = 10_000; // 10 seconds
+const PR_BODY_AGENT_TIMEOUT_MS = 60_000 * 5; // 5 minutes
 
-/** Run a quick health check to verify the Cursor CLI is invocable in this environment. */
-const checkCursorCli = async (): Promise<{
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-  error?: string;
-}> => {
-  console.log(
-    "[pr create] Cursor CLI health check: running `cursor --version` (timeout %ds)...",
-    CURSOR_HEALTH_CHECK_TIMEOUT_MS / 1000,
-  );
-  try {
-    const result = await execa("cursor", ["--version"], {
-      cwd: process.cwd(),
-      timeout: CURSOR_HEALTH_CHECK_TIMEOUT_MS,
-      reject: false,
-    });
-    const ok = result.exitCode === 0;
-    console.log(
-      "[pr create] Cursor CLI health check: exitCode=%d ok=%s stdout=%s stderr=%s",
-      result.exitCode ?? "null",
-      ok,
-      JSON.stringify((result.stdout ?? "").trim().slice(0, 200)),
-      JSON.stringify((result.stderr ?? "").trim().slice(0, 200)),
-    );
-    return {
-      ok,
-      stdout: (result.stdout ?? "").trim(),
-      stderr: (result.stderr ?? "").trim(),
-      ...(result.timedOut && { error: "timedOut" }),
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const timedOut =
-      err &&
-      typeof err === "object" &&
-      "timedOut" in err &&
-      (err as { timedOut?: boolean }).timedOut;
-    console.log(
-      "[pr create] Cursor CLI health check: failed error=%s timedOut=%s",
-      JSON.stringify(message.slice(0, 300)),
-      timedOut,
-    );
-    return {
-      ok: false,
-      stdout: "",
-      stderr: "",
-      error: timedOut ? "timedOut" : message.slice(0, 200),
-    };
-  }
-};
-
-const generatePrBodyWithCursor = async (args: {
+/**
+ * Generate PR body using the configured agent (e.g. Cursor CLI). Returns null if no agent
+ * is available or the agent returns empty. Callers should fall back to template + editor.
+ */
+export const generatePrBody = async (args: {
   changeId: string;
   bookmark: string;
   title: string;
   template: string;
-}): Promise<string> => {
-  const health = await checkCursorCli();
-  if (!health.ok) {
-    console.log(
-      "[pr create] Cursor CLI health check failed; attempting PR body generation anyway.",
-    );
-  }
-
+}): Promise<string | null> => {
   const prompt = [
     "Generate a GitHub pull request body in Markdown.",
     "Strict rules:",
@@ -252,93 +197,20 @@ const generatePrBodyWithCursor = async (args: {
     args.template,
   ].join("\n");
 
-  const CURSOR_TIMEOUT_MS = 60_000 * 5; // 5 minutes
   console.log(
-    "[pr create] Asking Cursor to generate PR body (timeout %ds)...",
-    CURSOR_TIMEOUT_MS / 1000,
+    "[pr create] Asking agent to generate PR body (timeout %ds)...",
+    PR_BODY_AGENT_TIMEOUT_MS / 1000,
   );
-  try {
-    const result = await execa(
-      "cursor",
-      [
-        "agent",
-        "--print",
-        "--trust",
-        "--mode",
-        "ask",
-        "--output-format",
-        "text",
-        prompt,
-      ],
-      { cwd: process.cwd(), timeout: CURSOR_TIMEOUT_MS },
-    );
-    const output = result.stdout.trim();
-    if (!output) {
-      throw new Error("Cursor CLI returned an empty PR description.");
-    }
-    console.log("[pr create] Cursor returned (%d chars).", output.length);
-    return output;
-  } catch (err) {
-    const timedOut =
-      err &&
-      typeof err === "object" &&
-      "timedOut" in err &&
-      (err as { timedOut?: boolean }).timedOut;
-    if (timedOut) {
-      throw new Error(
-        `Cursor agent did not respond within ${CURSOR_TIMEOUT_MS / 1000}s.`,
-        { cause: err },
-      );
-    }
-    throw err;
+  const output = await runPrintAgent({
+    cwd: process.cwd(),
+    prompt,
+    timeoutMs: PR_BODY_AGENT_TIMEOUT_MS,
+  });
+  if (output?.trim()) {
+    console.log("[pr create] Agent returned (%d chars).", output.length);
+    return output.trim();
   }
-};
-
-const EDITOR_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-
-const openEditorAndWait = async (filePath: string): Promise<void> => {
-  const editor = process.env.VISUAL ?? process.env.EDITOR;
-  console.log(
-    "[pr create] Opening editor (timeout %d min)...",
-    EDITOR_TIMEOUT_MS / 60_000,
-  );
-  const timeoutOpt = { stdio: "inherit" as const, timeout: EDITOR_TIMEOUT_MS };
-  try {
-    if (editor) {
-      const escapedPath = filePath.replace(/"/g, '\\"');
-      await execa("sh", ["-lc", `${editor} "${escapedPath}"`], timeoutOpt);
-      console.log("[pr create] Editor closed.");
-      return;
-    }
-
-    if (process.platform === "darwin") {
-      await execa("open", ["-W", "-t", filePath], timeoutOpt);
-      console.log("[pr create] Editor closed.");
-      return;
-    }
-
-    if (process.platform === "win32") {
-      await execa("notepad", [filePath], timeoutOpt);
-      console.log("[pr create] Editor closed.");
-      return;
-    }
-
-    await execa("vi", [filePath], timeoutOpt);
-    console.log("[pr create] Editor closed.");
-  } catch (err) {
-    const timedOut =
-      err &&
-      typeof err === "object" &&
-      "timedOut" in err &&
-      (err as { timedOut?: boolean }).timedOut;
-    if (timedOut) {
-      throw new Error(
-        `Editor did not complete within ${EDITOR_TIMEOUT_MS / 60_000} minutes. Save and close the file, then run pr create again.`,
-        { cause: err },
-      );
-    }
-    throw err;
-  }
+  return null;
 };
 
 export const createDraftPr = async (
@@ -350,17 +222,23 @@ export const createDraftPr = async (
   console.log("[pr create] Creating draft PR for bookmark %s...", bookmark);
   const title = await getPrTitle(changeId, bookmark);
   const template = await readPullRequestTemplate(cwd);
-  const generatedBody = await generatePrBodyWithCursor({
+  let generatedBody = await generatePrBody({
     changeId,
     bookmark,
     title,
     template,
   });
+  if (generatedBody == null || generatedBody.length === 0) {
+    console.warn(
+      "[pr create] No agent available or agent returned empty; using template and opening editor.",
+    );
+    generatedBody = template;
+  }
   const tempDirectory = await mkdtemp(join(tmpdir(), "jj-scripts-pr-"));
   const bodyPath = join(tempDirectory, "pr-body.md");
   try {
     await writeFile(bodyPath, `${generatedBody}\n`, "utf8");
-    await openEditorAndWait(bodyPath);
+    await openEditorAndWait(bodyPath, { logPrefix: "pr create" });
     const body = await readFile(bodyPath, "utf8");
     await createOneDraftPr(cwd, base, bookmark, body.trim(), {
       openInBrowser: true,
@@ -370,25 +248,25 @@ export const createDraftPr = async (
   }
 };
 
-type CreateOptions = PrOptions & { checkCursor?: boolean };
+type CreateOptions = PrOptions & { checkAgent?: boolean };
 
 export const registerCreate = (pr: Command): void => {
   pr.command("create")
     .description(
       "Create a draft PR (or view existing one) for the change's bookmark",
     )
-    .requiredOption("-c, --change-id <id>", "Change ID")
+    .option("-c, --change-id <id>", "Change ID (required unless --check-agent)")
     .option(
-      "--check-cursor",
-      "Only run Cursor CLI health check and exit (for debugging)",
+      "--check-agent",
+      "Only run agent runner check and exit (for debugging)",
     )
     .action(async (opts: CreateOptions) => {
-      if (opts.checkCursor) {
-        const health = await checkCursorCli();
-        console.log("[pr create] Health check done. ok=%s", health.ok);
-        if (!health.ok && health.error) {
-          console.log("[pr create] error=%s", health.error);
-        }
+      if (opts.checkAgent) {
+        const resolved = await resolveAgentCommand();
+        console.log(
+          "[pr create] Agent runner: %s",
+          resolved ? resolved.argv.join(" ") : "not found",
+        );
         return;
       }
       const changeId = withChangeId(opts);
