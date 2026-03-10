@@ -8,7 +8,7 @@ import {
 } from "node:path";
 import type { Command } from "commander";
 import { exitWith } from "../../lib/errors.js";
-import { jj, jjCapture } from "../../lib/jj.js";
+import { jj, jjCapture, splitLines } from "../../lib/jj.js";
 import { promptLine } from "../../lib/prompt.js";
 import {
   forgetWorkspaceRecord,
@@ -22,8 +22,8 @@ type WorkspaceRemoveOptions = {
   force?: boolean;
 };
 
-const resolvePathOption = (repoRoot: string, path: string): string =>
-  isAbsolute(path) ? path : resolve(repoRoot, path);
+const resolvePathOption = (baseDir: string, path: string): string =>
+  isAbsolute(path) ? path : resolve(baseDir, path);
 
 /** Workspace root is the parent of the repo (siblings of the repo live here). */
 const getWorkspaceRoot = (repoRoot: string): string =>
@@ -45,11 +45,51 @@ const isAllowedDeleteTarget = (
   return norm.startsWith(wsRoot + sep);
 };
 
+const parseWorkspaceNameLine = (line: string): string => {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+  if (trimmed.startsWith('"')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (typeof parsed === "string") {
+        return parsed;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return trimmed;
+};
+
+async function getCurrentWorkspaceName(repoRoot: string): Promise<string> {
+  const raw = (
+    await jjCapture(["log", "-r", "@", "-T", "working_copies"], {
+      cwd: repoRoot,
+    })
+  ).trim();
+  const token = raw.split(/\s+/)[0] ?? "";
+  if (!token.endsWith("@")) {
+    exitWith(1, "Failed to determine current jj workspace name.");
+  }
+  return token.slice(0, -1);
+}
+
+async function listJjWorkspaceNames(repoRoot: string): Promise<string[]> {
+  const raw = await jjCapture(["workspace", "list", "-T", 'name ++ "\\n"'], {
+    cwd: repoRoot,
+  });
+  return splitLines(raw)
+    .map(parseWorkspaceNameLine)
+    .filter((s) => s.length > 0);
+}
+
 export function registerWorkspaceRemove(workspace: Command): void {
   workspace
     .command("remove [name]")
     .description(
-      "Forget a jj workspace and delete its directory. If name is omitted and stdin is a TTY, list workspaces and prompt to pick one.",
+      "Forget a jj workspace and optionally delete its directory. If name is omitted and stdin is a TTY, list workspaces and prompt to pick one.",
     )
     .option(
       "-p, --path <path>",
@@ -68,17 +108,28 @@ export function registerWorkspaceRemove(workspace: Command): void {
     .action(async (name: string | undefined, opts: WorkspaceRemoveOptions) => {
       const repoRoot = (await jjCapture(["root"])).trim();
       const workspaceRoot = getWorkspaceRoot(repoRoot);
+      const currentWorkspace = await getCurrentWorkspaceName(repoRoot);
       let workspaceName: string;
       if (!name?.trim()) {
         if (!process.stdin.isTTY) {
           exitWith(1, "name required (run with a TTY to pick from list)");
         }
-        const names = await listWorkspaceNames(repoRoot);
+        const [jjNames, registryNames] = await Promise.all([
+          listJjWorkspaceNames(repoRoot),
+          listWorkspaceNames(repoRoot),
+        ]);
+        const registrySet = new Set(registryNames);
+        const names = [...new Set([...jjNames, ...registryNames])].toSorted();
         if (names.length === 0) {
-          exitWith(1, "No workspaces in registry.");
+          exitWith(1, "No jj workspaces found.");
         }
         for (let i = 0; i < names.length; i++) {
-          console.log(`${i + 1}. ${names[i]}`);
+          const n = names[i]!;
+          const flags: string[] = [];
+          if (n === currentWorkspace) flags.push("current");
+          if (registrySet.has(n)) flags.push("tracked");
+          const suffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
+          console.log(`${i + 1}. ${n}${suffix}`);
         }
         const raw = await promptLine("Pick workspace (number or name): ");
         const byIndex =
@@ -91,14 +142,33 @@ export function registerWorkspaceRemove(workspace: Command): void {
         workspaceName = name.trim();
       }
 
+      if (workspaceName === currentWorkspace) {
+        exitWith(
+          1,
+          `Refusing to remove current workspace '${workspaceName}'. Switch to a different workspace and retry.`,
+        );
+      }
+
       let workspacePath: string | undefined;
       if (opts.path?.trim()) {
-        workspacePath = resolvePathOption(repoRoot, opts.path.trim());
+        workspacePath = resolvePathOption(workspaceRoot, opts.path.trim());
       } else {
         workspacePath = await lookupWorkspacePath(repoRoot, workspaceName);
       }
 
-      await jj(["workspace", "forget", workspaceName], { cwd: repoRoot });
+      if (!workspacePath) {
+        try {
+          workspacePath = (
+            await jjCapture(["workspace", "root", `--name=${workspaceName}`], {
+              cwd: repoRoot,
+            })
+          ).trim();
+        } catch {
+          workspacePath = undefined;
+        }
+      }
+
+      await jj(["workspace", "forget", "--", workspaceName], { cwd: repoRoot });
 
       if (!opts.keepFiles && workspacePath) {
         const normPath = resolve(workspacePath);
