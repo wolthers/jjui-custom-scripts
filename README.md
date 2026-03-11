@@ -42,70 +42,124 @@ If no agent is found, `pr create` and `pr sync` fall back to the PR template and
 Your configs have been wired to invoke this CLI so you no longer need inline Lua or shell snippets.
 
 - **jj** — `jj integrate` and `jj restack` run the CLI via `util exec`. Update the path in `~/.config/jj/config.toml` if you move the repo.
-- **jjui** — Add custom commands in `~/.config/jjui/config.toml` that call this CLI with the absolute path to `dist/cli.js`. Use jjui’s `$change_id` placeholder for change-scoped commands.
+- **jjui** (v0.10+) — Add actions and bindings in `~/.config/jjui/config.toml` that call this CLI via `jj_interactive()`. Use the absolute path to `dist/cli.js`. For change-scoped commands, actions use `context.change_id()` in Lua.
 
-Example jjui config (replace `PATH_TO` with the absolute path to your repo):
+Example jjui config for **jjui 0.10** (replace `PATH_TO` with the absolute path to your repo):
 
 ```toml
-[custom_commands.integrate]
-key_sequence = ["x", "i"]
+[[actions]]
+name = "integrate"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "integrate", "-r", "@")
+'''
+[[bindings]]
+action = "integrate"
+seq = ["x", "i"]
+scope = "revisions"
 desc = "Integrate change in a stack"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "integrate", "-r", "@"]
-show = "interactive"
 
-[custom_commands.restack]
-key_sequence = ["x", "r"]
+[[actions]]
+name = "restack"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "restack")
+'''
+[[bindings]]
+action = "restack"
+seq = ["x", "r"]
+scope = "revisions"
 desc = "Restack"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "restack"]
-show = "interactive"
 
-[custom_commands.sync-prs]
-key_sequence = ["x", "p", "s"]
+[[actions]]
+name = "sync-prs"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "sync")
+'''
+[[bindings]]
+action = "sync-prs"
+seq = ["x", "p", "s"]
+scope = "revisions"
 desc = "Sync PRs"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "sync"]
-show = "interactive"
 
-[custom_commands.view-pr]
-key_sequence = ["x", "p", "v"]
+[[actions]]
+name = "view-pr"
+lua = '''
+local cid = context.change_id()
+if not cid then flash("No revision selected"); return end
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "view", "--change-id", cid)
+'''
+[[bindings]]
+action = "view-pr"
+seq = ["x", "p", "v"]
+scope = "revisions"
 desc = "View PR"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "view", "--change-id", "$change_id"]
-show = "interactive"
 
-[custom_commands.create-pr]
-key_sequence = ["x", "p", "c"]
+[[actions]]
+name = "create-pr"
+lua = '''
+local cid = context.change_id()
+if not cid then flash("No revision selected"); return end
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "create", "--change-id", cid)
+'''
+[[bindings]]
+action = "create-pr"
+seq = ["x", "p", "c"]
+scope = "revisions"
 desc = "Create draft PR"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "create", "--change-id", "$change_id"]
-show = "interactive"
 
-[custom_commands.review-pr]
-key_sequence = ["x", "p", "r"]
+[[actions]]
+name = "review-pr"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "checkout")
+'''
+[[bindings]]
+action = "review-pr"
+seq = ["x", "p", "r"]
+scope = "revisions"
 desc = "Review PR"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "checkout"]
-show = "interactive"
 
-[custom_commands.workspace-add]
-key_sequence = ["x", "w", "a"]
+[[actions]]
+name = "workspace-add"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "add")
+'''
+[[bindings]]
+action = "workspace-add"
+seq = ["x", "w", "a"]
+scope = "revisions"
 desc = "Add workspace"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "add"]
-show = "interactive"
 
-[custom_commands.workspace-list]
-key_sequence = ["x", "w", "l"]
+[[actions]]
+name = "workspace-list"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "list")
+'''
+[[bindings]]
+action = "workspace-list"
+seq = ["x", "w", "l"]
+scope = "revisions"
 desc = "List workspaces"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "list"]
-show = "interactive"
 
-[custom_commands.workspace-remove]
-key_sequence = ["x", "w", "r"]
+[[actions]]
+name = "workspace-remove"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "remove")
+'''
+[[bindings]]
+action = "workspace-remove"
+seq = ["x", "w", "r"]
+scope = "revisions"
 desc = "Remove workspace"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "remove"]
-show = "interactive"
 
-[custom_commands.workspace-ai-implement]
-key_sequence = ["x", "w", "i"]
+[[actions]]
+name = "workspace-ai-implement"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "ai-implement")
+'''
+[[bindings]]
+action = "workspace-ai-implement"
+seq = ["x", "w", "i"]
+scope = "revisions"
 desc = "Create workspace and run agent"
-args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "ai-implement"]
-show = "interactive"
 ```
 
 ## Adding a new command
