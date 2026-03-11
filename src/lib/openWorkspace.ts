@@ -6,10 +6,9 @@ import { execa } from "execa";
  */
 export function spawnWorkspaceOpener(
   workspacePath: string,
-  options?: { noOpen?: boolean },
+  options?: { label?: string },
 ): void {
-  if (options?.noOpen) return;
-
+  const label = options?.label ?? "workspace";
   const child = execa("cursor", ["-n", workspacePath], {
     detached: true,
     stdio: "ignore",
@@ -20,6 +19,6 @@ export function spawnWorkspaceOpener(
       err && typeof err === "object" && "message" in err
         ? String((err as { message: unknown }).message)
         : String(err);
-    console.warn("[pr checkout] Could not open Cursor: %s", message);
+    console.warn("[%s] Could not open Cursor: %s", label, message);
   });
 }

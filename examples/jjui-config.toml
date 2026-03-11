@@ -96,6 +96,17 @@ scope = "revisions"
 desc = "List workspaces"
 
 [[actions]]
+name = "workspace-open"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "open")
+'''
+[[bindings]]
+action = "workspace-open"
+seq = ["x", "w", "o"]
+scope = "revisions"
+desc = "Open workspace in Cursor"
+
+[[actions]]
 name = "workspace-remove"
 lua = '''
 jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "remove")

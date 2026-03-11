@@ -18,7 +18,7 @@ import {
 
 type PrCheckoutOptions = CreateWorkspaceOptions &
   PrOptions & {
-    noOpen?: boolean;
+    open?: boolean;
     prefix?: string;
   };
 
@@ -59,7 +59,7 @@ async function getPrNumberFromChange(
 export function registerCheckout(pr: Command): void {
   pr.command("checkout [pr-number]")
     .description(
-      "Check out a PR in a new jj workspace. Creates a full workspace (env files, direnv) and runs jj checkout <branch>@origin in it.",
+      "Check out a PR in a new jj workspace. Creates a full workspace (env files, direnv) and runs jj edit <branch>@origin in it.",
     )
     .option(
       "-c, --change-id <id>",
@@ -119,7 +119,7 @@ export function registerCheckout(pr: Command): void {
           },
         );
 
-        await jj(["checkout", `${branch}@origin`], { cwd: workspacePath });
+        await jj(["new", `${branch}@origin`], { cwd: workspacePath });
         console.log(
           "[pr checkout] Checked out PR #%d (%s) in %s",
           prNumber,
@@ -127,7 +127,9 @@ export function registerCheckout(pr: Command): void {
           workspacePath,
         );
 
-        spawnWorkspaceOpener(workspacePath, { noOpen: opts.noOpen === true });
+        if (opts.open !== false) {
+          spawnWorkspaceOpener(workspacePath, { label: "pr checkout" });
+        }
       },
     );
 }

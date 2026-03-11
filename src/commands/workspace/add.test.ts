@@ -191,6 +191,7 @@ describe("workspace add", () => {
       repoRoot,
       workspace: "my-ws",
       path: workspacePath,
+      bookmark: "ws1",
     });
   });
 

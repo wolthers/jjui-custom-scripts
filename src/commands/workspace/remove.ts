@@ -7,12 +7,26 @@ import {
   sep,
 } from "node:path";
 import type { Command } from "commander";
+import { execa } from "execa";
 import { exitWith } from "../../lib/errors.js";
-import { jj, jjCapture, splitLines } from "../../lib/jj.js";
+
+async function teardownGitWorktree(
+  repoRoot: string,
+  workspacePath: string,
+): Promise<void> {
+  await execa(
+    "git",
+    ["-C", repoRoot, "worktree", "remove", "--force", workspacePath],
+    { reject: false },
+  );
+}
+import { jj, jjCapture } from "../../lib/jj.js";
 import { confirmLine, promptLine } from "../../lib/prompt.js";
 import {
   forgetWorkspaceRecord,
+  listJjWorkspaceNames,
   listRegistryWorkspaceNames,
+  lookupWorkspaceBookmark,
   lookupWorkspacePath,
   reconcileWorkspaceRegistry,
   type RegistryOutOfSyncRecord,
@@ -48,24 +62,6 @@ const isAllowedDeleteTarget = (
   return norm.startsWith(wsRoot + sep);
 };
 
-const parseWorkspaceNameLine = (line: string): string => {
-  const trimmed = line.trim();
-  if (trimmed.length === 0) {
-    return "";
-  }
-  if (trimmed.startsWith('"')) {
-    try {
-      const parsed: unknown = JSON.parse(trimmed);
-      if (typeof parsed === "string") {
-        return parsed;
-      }
-    } catch {
-      // fall through
-    }
-  }
-  return trimmed;
-};
-
 async function getCurrentWorkspaceName(repoRoot: string): Promise<string> {
   const raw = (
     await jjCapture(["log", "-r", "@", "-T", "working_copies"], {
@@ -77,15 +73,6 @@ async function getCurrentWorkspaceName(repoRoot: string): Promise<string> {
     exitWith(1, "Failed to determine current jj workspace name.");
   }
   return token.slice(0, -1);
-}
-
-async function listJjWorkspaceNames(repoRoot: string): Promise<string[]> {
-  const raw = await jjCapture(["workspace", "list", "-T", 'name ++ "\\n"'], {
-    cwd: repoRoot,
-  });
-  return splitLines(raw)
-    .map(parseWorkspaceNameLine)
-    .filter((s) => s.length > 0);
 }
 
 function warnOutOfSync(records: RegistryOutOfSyncRecord[]): void {
@@ -173,6 +160,13 @@ export function registerWorkspaceRemove(workspace: Command): void {
         );
       }
 
+      if (workspaceName === "default") {
+        exitWith(
+          1,
+          "Refusing to remove the default workspace (main repo). It cannot be forgotten or deleted.",
+        );
+      }
+
       let workspacePath: string | undefined;
       if (opts.path?.trim()) {
         workspacePath = resolvePathOption(workspaceRoot, opts.path.trim());
@@ -245,14 +239,38 @@ export function registerWorkspaceRemove(workspace: Command): void {
         }
       }
 
+      const bookmarkFromRegistry = await lookupWorkspaceBookmark(
+        repoRoot,
+        workspaceName,
+      );
+      const bookmarkToForget = bookmarkFromRegistry ?? workspaceName;
+
       console.log(
         "[workspace remove] Forgetting workspace %s...",
         workspaceName,
       );
       await jj(["workspace", "forget", "--", workspaceName], { cwd: repoRoot });
+
+      try {
+        await jj(["-R", repoRoot, "bookmark", "forget", bookmarkToForget], {
+          cwd: repoRoot,
+        });
+        console.log("[workspace remove] Forgot bookmark: %s", bookmarkToForget);
+      } catch (err) {
+        console.warn(
+          `Warning: Could not forget bookmark '${bookmarkToForget}'. It may not exist or may have already been removed.`,
+        );
+        if (process.env.JJ_SCRIPTS_DEBUG === "1") {
+          console.warn(err instanceof Error ? err.message : String(err));
+        }
+      }
+
       await forgetWorkspaceRecord(repoRoot, workspaceName);
 
       if (pathToDelete) {
+        // Deregister the git worktree before deleting the directory, so git
+        // doesn't accumulate stale entries in .git/worktrees/.
+        await teardownGitWorktree(repoRoot, pathToDelete);
         console.log(
           "[workspace remove] Deleting directory %s...",
           pathToDelete,

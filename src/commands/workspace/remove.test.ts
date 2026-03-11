@@ -19,8 +19,10 @@ vi.mock("../../lib/jj.js", async () => {
 });
 vi.mock("./registry.js", () => ({
   lookupWorkspacePath: vi.fn(),
+  lookupWorkspaceBookmark: vi.fn().mockResolvedValue(undefined),
   forgetWorkspaceRecord: vi.fn().mockResolvedValue(undefined),
   listRegistryWorkspaceNames: vi.fn().mockResolvedValue([]),
+  listJjWorkspaceNames: vi.fn().mockResolvedValue(["default", "my-ws"]),
   reconcileWorkspaceRegistry: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../lib/prompt.js", () => ({
@@ -34,6 +36,7 @@ describe("workspace remove", () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.mocked(registryLib.forgetWorkspaceRecord).mockResolvedValue(undefined);
+    vi.mocked(registryLib.lookupWorkspaceBookmark).mockResolvedValue(undefined);
   });
 
   const mockJjCapture = (
@@ -97,6 +100,46 @@ describe("workspace remove", () => {
     expect(registryLib.forgetWorkspaceRecord).toHaveBeenCalledWith(
       repoRoot,
       "my-ws",
+    );
+  });
+
+  it("deletes associated bookmark when registry has one", async () => {
+    mockJjCapture({ workspaceRoot: "" });
+    vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
+    vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(undefined);
+    vi.mocked(registryLib.lookupWorkspaceBookmark).mockResolvedValue(
+      "my-branch",
+    );
+
+    const program = programWithWorkspace();
+    const result = await runCli(
+      program,
+      cliArgs("workspace", "remove", "my-ws", "--keep-files"),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(jjLib.jj).toHaveBeenCalledWith(
+      ["-R", repoRoot, "bookmark", "forget", "my-branch"],
+      { cwd: repoRoot },
+    );
+  });
+
+  it("tries workspace name as bookmark when registry has none", async () => {
+    mockJjCapture({ workspaceRoot: "" });
+    vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
+    vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(undefined);
+    vi.mocked(registryLib.lookupWorkspaceBookmark).mockResolvedValue(undefined);
+
+    const program = programWithWorkspace();
+    const result = await runCli(
+      program,
+      cliArgs("workspace", "remove", "my-ws", "--keep-files"),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(jjLib.jj).toHaveBeenCalledWith(
+      ["-R", repoRoot, "bookmark", "forget", "my-ws"],
+      expect.any(Object),
     );
   });
 
@@ -277,6 +320,25 @@ describe("workspace remove", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Refusing to remove current workspace");
+  });
+
+  it("refuses to remove the default workspace", async () => {
+    mockJjCapture({
+      currentWorkspace: "my-ws",
+      workspaceRoot: "",
+    });
+
+    const program = programWithWorkspace();
+    const result = await runCli(
+      program,
+      cliArgs("workspace", "remove", "default", "--keep-files"),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      "Refusing to remove the default workspace (main repo)",
+    );
+    expect(jjLib.jj).not.toHaveBeenCalled();
   });
 
   it("can forget a workspace named --help", async () => {

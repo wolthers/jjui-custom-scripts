@@ -1,38 +1,12 @@
 import type { Command } from "commander";
 import { EXIT_EMPTY, exitWith } from "../../lib/errors.js";
-import { jjCapture, splitLines } from "../../lib/jj.js";
+import { jjCapture } from "../../lib/jj.js";
 import {
+  listJjWorkspaceNames,
   listRegistryWorkspaceNames,
   reconcileWorkspaceRegistry,
   type RegistryOutOfSyncRecord,
 } from "./registry.js";
-
-const parseWorkspaceNameLine = (line: string): string => {
-  const trimmed = line.trim();
-  if (trimmed.length === 0) {
-    return "";
-  }
-  if (trimmed.startsWith('"')) {
-    try {
-      const parsed: unknown = JSON.parse(trimmed);
-      if (typeof parsed === "string") {
-        return parsed;
-      }
-    } catch {
-      // fall through
-    }
-  }
-  return trimmed;
-};
-
-async function listJjWorkspaceNames(repoRoot: string): Promise<string[]> {
-  const raw = await jjCapture(["workspace", "list", "-T", 'name ++ "\\n"'], {
-    cwd: repoRoot,
-  });
-  return splitLines(raw)
-    .map(parseWorkspaceNameLine)
-    .filter((s) => s.length > 0);
-}
 
 function warnOutOfSync(records: RegistryOutOfSyncRecord[]): void {
   for (const record of records) {

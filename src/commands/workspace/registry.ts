@@ -1,15 +1,42 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { jjCapture, splitLines } from "../../lib/jj.js";
 
 type WorkspaceRecord = {
   path: string;
   createdAt: string;
+  bookmark?: string;
 };
 
 type WorkspaceRegistry = {
   version: 1;
   workspaces: Record<string, WorkspaceRecord>;
 };
+
+export const parseWorkspaceNameLine = (line: string): string => {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) return "";
+  if (trimmed.startsWith('"')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (typeof parsed === "string") return parsed;
+    } catch {
+      // fall through
+    }
+  }
+  return trimmed;
+};
+
+export async function listJjWorkspaceNames(
+  repoRoot: string,
+): Promise<string[]> {
+  const raw = await jjCapture(["workspace", "list", "-T", 'name ++ "\\n"'], {
+    cwd: repoRoot,
+  });
+  return splitLines(raw)
+    .map(parseWorkspaceNameLine)
+    .filter((s) => s.length > 0);
+}
 
 export type RegistryOutOfSyncReason = "missing-folder" | "missing-jj-workspace";
 
@@ -77,11 +104,13 @@ export async function rememberWorkspace(params: {
   repoRoot: string;
   workspace: string;
   path: string;
+  bookmark?: string;
 }): Promise<void> {
   const registry = await loadRegistry(params.repoRoot);
   registry.workspaces[params.workspace] = {
     path: params.path,
     createdAt: new Date().toISOString(),
+    ...(params.bookmark ? { bookmark: params.bookmark } : {}),
   };
   await saveRegistry(params.repoRoot, registry);
 }
@@ -100,6 +129,15 @@ export async function lookupWorkspacePath(
   const registry = await loadRegistry(repoRoot);
   return registry.workspaces[workspace]?.path;
 }
+
+export async function lookupWorkspaceBookmark(
+  repoRoot: string,
+  workspace: string,
+): Promise<string | undefined> {
+  const registry = await loadRegistry(repoRoot);
+  return registry.workspaces[workspace]?.bookmark;
+}
+
 
 export async function forgetWorkspaceRecord(
   repoRoot: string,

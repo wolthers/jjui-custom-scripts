@@ -25,6 +25,10 @@ Guidance for AI coding agents working in this repository.
   - `src/lib/jj.ts` for `jj` command execution and capture helpers
   - `src/lib/gh.ts` for GitHub CLI execution
   - `src/lib/errors.ts` for exit codes, `exitWith`, and `CliError`
+  - `src/lib/prompt.ts` for TTY-safe `promptLine` and `confirmLine`
+  - `src/lib/openWorkspace.ts` for `spawnWorkspaceOpener` (fire-and-forget `cursor -n <path>`)
+  - `src/lib/editor.ts` for opening a file in the user's editor
+  - `src/lib/agent.ts` for resolving and running the configured AI agent
 
 ## Error handling and exit behavior
 
@@ -63,11 +67,22 @@ Guidance for AI coding agents working in this repository.
 - **Workspace root**: Workspaces are siblings of the repo. The workspace root is `dirname(repoRoot)` (one level up from the jj repo root). All relative paths for add/remove are resolved against this workspace root, not `process.cwd()`.
 - `workspace add`:
   - Resolves relative `destination` as `resolve(dirname(repoRoot), destination)`; absolute destinations are used as-is.
-  - Creates a workspace via `jj workspace add`, copies relevant `.env*` files (excluding template/sample variants), optionally runs Cursor setup/task flows, and tracks path in the registry.
+  - Creates a workspace via `jj workspace add`, creates a bookmark, copies relevant `.env*` files (excluding template/sample variants), tracks path in the registry, then opens the workspace in Cursor (pass `--no-open` to skip).
+- `workspace list`:
+  - Lists workspaces from `jj workspace list`. In a TTY, pauses with "Press any key to continue" so output is visible when invoked from jjui.
+  - Reconciles the registry against jj's workspace list on every run, pruning stale entries.
+  - Empty check is against jj's list (not the registry), so untracked workspaces are still shown.
+- `workspace open`:
+  - Resolves workspace path from the registry first, then falls back to `jj workspace root --name=<name>`.
+  - Opens the workspace in Cursor via `spawnWorkspaceOpener` (fire-and-forget).
+  - Prompts to pick from the combined jj+registry list when name is omitted and stdin is a TTY.
 - `workspace remove`:
+  - All confirmation prompts and safety checks run **before** any destructive operation (`jj workspace forget`, `forgetWorkspaceRecord`, `rm`). Aborting at any prompt leaves the workspace fully intact.
   - Only allows deleting paths under the workspace root (and not the workspace root or repo root). Out-of-bound targets are refused unless `--force` is passed; with TTY and `--force`, the user must type `yes` to confirm.
   - Emits an advisory warning (no refusal) when the folder name does not start with `workspace-`.
+- **Commander negatable booleans**: Use `.option("--no-<name>", …)` for flags that disable a default-on behaviour. Commander maps this to `opts.<name> = false` (not `opts.no<Name>`). Check with `opts.<name> !== false` or `opts.<name> === false` at the call site; do not pass a `noOpen`-style field to helpers — just guard the call.
 - Workspace registry file path is `.jj/jj-scripts-workspaces.json` (schema version `1`).
+- Shared workspace utilities (`parseWorkspaceNameLine`, `listJjWorkspaceNames`) live in `registry.ts` and are imported by all workspace commands.
 
 ## Documentation expectations
 
@@ -85,8 +100,10 @@ After each turn, run:
 
 For command behavior changes, also run targeted command smoke checks via:
 
-- `pnpm dev -- ping`
-- `pnpm dev -- <group> <command> --help`
+- `node dist/cli.js ping`
+- `node dist/cli.js <group> <command> --help`
+
+Note: do **not** use `pnpm dev -- <args>` for smoke checks — pnpm passes the `--` separator through to tsx, which causes Commander to treat everything after it as positional arguments rather than flags (e.g. `--help` runs the command instead of showing help).
 
 ## Change quality bar
 

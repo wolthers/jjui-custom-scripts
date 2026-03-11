@@ -1,9 +1,10 @@
-import { execa } from "execa";
-import { copyFile, readdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Command } from "commander";
+import { execa } from "execa";
 import { exitWith } from "../../lib/errors.js";
 import { jj, jjCapture } from "../../lib/jj.js";
+import { spawnWorkspaceOpener } from "../../lib/openWorkspace.js";
 import { promptLine } from "../../lib/prompt.js";
 import { rememberWorkspace } from "./registry.js";
 
@@ -13,6 +14,7 @@ type WorkspaceAddOptions = {
   message?: string;
   sparsePatterns?: "copy" | "full" | "empty";
   prefix?: string;
+  open?: boolean;
 };
 
 const ENV_FILE_PATTERN = /^\.env(?:\..+)?$/;
@@ -72,8 +74,62 @@ export type CreateWorkspaceResult = {
 };
 
 /**
- * Create a jj workspace and prepare it (copy .env files, direnv allow).
- * Used by both workspace add and ai-implement.
+ * Register a jj workspace directory as a git worktree so that nix/direnv can
+ * use `git ls-files` for file enumeration (respecting .gitignore) instead of
+ * hashing the entire working tree. Without this, `use flake` in .envrc rehashes
+ * node_modules and other large ignored directories on every new shell.
+ *
+ * Silently skips if the repo is not git-backed or the bookmark isn't visible to git.
+ */
+async function setupGitWorktree(
+  repoRoot: string,
+  workspacePath: string,
+  workspaceName: string,
+  bookmarkName: string,
+): Promise<void> {
+  const gitCommonDirResult = await execa(
+    "git",
+    ["-C", repoRoot, "rev-parse", "--git-common-dir"],
+    { reject: false },
+  );
+  if (gitCommonDirResult.exitCode !== 0) return;
+
+  const rawGitCommonDir = gitCommonDirResult.stdout.trim();
+  const commonGitDir = isAbsolute(rawGitCommonDir)
+    ? rawGitCommonDir
+    : join(repoRoot, rawGitCommonDir);
+
+  const shaResult = await execa(
+    "git",
+    ["-C", repoRoot, "rev-parse", bookmarkName],
+    { reject: false },
+  );
+  if (shaResult.exitCode !== 0 || !shaResult.stdout.trim()) return;
+  const commitSha = shaResult.stdout.trim();
+
+  const worktreeMetaDir = join(commonGitDir, "worktrees", workspaceName);
+  await mkdir(worktreeMetaDir, { recursive: true });
+  await writeFile(join(worktreeMetaDir, "gitdir"), join(workspacePath, ".git"));
+  await writeFile(join(worktreeMetaDir, "commondir"), "../..");
+  await writeFile(join(worktreeMetaDir, "HEAD"), commitSha);
+  await writeFile(
+    join(workspacePath, ".git"),
+    `gitdir: ${join(commonGitDir, "worktrees", workspaceName)}\n`,
+  );
+
+  // Populate the git index so git ls-files works in the workspace
+  await execa("git", ["read-tree", commitSha], {
+    env: { ...process.env, GIT_DIR: worktreeMetaDir, GIT_WORK_TREE: workspacePath },
+    cwd: workspacePath,
+    reject: false,
+  });
+
+  console.log("Set up git worktree for fast direnv/nix evaluation.");
+}
+
+/**
+ * Create a jj workspace and prepare it (copy .env files).
+ * Used by workspace add, pr checkout, and ai-implement.
  */
 export async function createWorkspace(
   repoRoot: string,
@@ -101,10 +157,12 @@ export async function createWorkspace(
   }
   await jj(args, { cwd: repoRoot });
 
-  await jj(["bookmark", "create", bookmarkName, "-r", `${workspaceName}@`], {
+  await jj(["bookmark", "set", bookmarkName, "-r", `${workspaceName}@`], {
     cwd: repoRoot,
   });
-  console.log(`Created bookmark: ${bookmarkName}`);
+  console.log(`Set bookmark: ${bookmarkName}`);
+
+  await setupGitWorktree(repoRoot, workspacePath, workspaceName, bookmarkName);
 
   const copiedEnvFiles = await copyRelevantEnvFiles(repoRoot, workspacePath);
   if (copiedEnvFiles.length > 0) {
@@ -117,14 +175,8 @@ export async function createWorkspace(
     repoRoot,
     workspace: workspaceName,
     path: workspacePath,
+    bookmark: bookmarkName,
   });
-
-  try {
-    await execa("direnv", ["allow"], { cwd: workspacePath });
-    console.log("Ran direnv allow in workspace.");
-  } catch {
-    // direnv not installed or no .envrc - skip silently
-  }
 
   return { workspacePath, workspaceName };
 }
@@ -133,7 +185,7 @@ export function registerWorkspaceAdd(workspace: Command): void {
   workspace
     .command("add [destination]")
     .description(
-      "Create a jj workspace and prepare it (copy .env files, direnv allow). If destination is omitted and stdin is a TTY, prompts for a name (prefixed with workspace-).",
+      "Create a jj workspace and prepare it (copy .env files). If destination is omitted and stdin is a TTY, prompts for a name (prefixed with workspace-).",
     )
     .option(
       "--name <name>",
@@ -158,6 +210,7 @@ export function registerWorkspaceAdd(workspace: Command): void {
       "--prefix <prefix>",
       "Prepend to destination (e.g. 'workspace-' for jjui: user types 'foo' -> workspace-foo)",
     )
+    .option("--no-open", "Do not open the workspace in Cursor")
     .action(
       async (destination: string | undefined, opts: WorkspaceAddOptions) => {
         const repoRoot = (await jjCapture(["root"])).trim();
@@ -181,12 +234,20 @@ export function registerWorkspaceAdd(workspace: Command): void {
             : destination;
           bookmarkName = destination;
         }
-        await createWorkspace(repoRoot, resolvedDestination, bookmarkName, {
-          name: opts.name,
-          revision: opts.revision,
-          message: opts.message,
-          sparsePatterns: opts.sparsePatterns,
-        });
+        const { workspacePath } = await createWorkspace(
+          repoRoot,
+          resolvedDestination,
+          bookmarkName,
+          {
+            name: opts.name,
+            revision: opts.revision,
+            message: opts.message,
+            sparsePatterns: opts.sparsePatterns,
+          },
+        );
+        if (opts.open !== false) {
+          spawnWorkspaceOpener(workspacePath, { label: "workspace add" });
+        }
       },
     );
 }

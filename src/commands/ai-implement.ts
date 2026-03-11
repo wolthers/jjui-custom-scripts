@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { execa } from "execa";
 import { exitWith } from "../lib/errors.js";
 import { jjCapture } from "../lib/jj.js";
 import { promptLine } from "../lib/prompt.js";
@@ -93,6 +94,13 @@ export function registerAiImplement(program: Command): void {
             sparsePatterns: opts.sparsePatterns,
           },
         );
+
+        try {
+          await execa("direnv", ["allow"], { cwd: workspacePath });
+          console.log("[ai-implement] Ran direnv allow in workspace.");
+        } catch {
+          // direnv not installed or no .envrc - skip silently
+        }
 
         const initialPrompt = opts.skipSetupPrompt ? undefined : SETUP_PROMPT;
 
