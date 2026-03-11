@@ -1,0 +1,118 @@
+# jjui config for jj-scripts CLI. Replace PATH_TO with the absolute path to your repo (e.g. /path/to/jj-scripts).
+# Install: cp examples/jjui-config.toml ~/.config/jjui/config.toml
+# Then sed -i 's|PATH_TO|/your/actual/path|g' ~/.config/jjui/config.toml
+# Or merge these actions into your existing ~/.config/jjui/config.toml
+
+[[actions]]
+name = "integrate"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "integrate", "-r", "@")
+'''
+[[bindings]]
+action = "integrate"
+seq = ["x", "i"]
+scope = "revisions"
+desc = "Integrate change in a stack"
+
+[[actions]]
+name = "restack"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "restack")
+'''
+[[bindings]]
+action = "restack"
+seq = ["x", "r"]
+scope = "revisions"
+desc = "Restack"
+
+[[actions]]
+name = "sync-prs"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "sync")
+'''
+[[bindings]]
+action = "sync-prs"
+seq = ["x", "p", "s"]
+scope = "revisions"
+desc = "Sync PRs"
+
+[[actions]]
+name = "view-pr"
+lua = '''
+local cid = context.change_id()
+if not cid then flash("No revision selected"); return end
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "view", "--change-id", cid)
+'''
+[[bindings]]
+action = "view-pr"
+seq = ["x", "p", "v"]
+scope = "revisions"
+desc = "View PR"
+
+[[actions]]
+name = "create-pr"
+lua = '''
+local cid = context.change_id()
+if not cid then flash("No revision selected"); return end
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "create", "--change-id", cid)
+'''
+[[bindings]]
+action = "create-pr"
+seq = ["x", "p", "c"]
+scope = "revisions"
+desc = "Create draft PR"
+
+[[actions]]
+name = "review-pr"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "checkout")
+'''
+[[bindings]]
+action = "review-pr"
+seq = ["x", "p", "r"]
+scope = "revisions"
+desc = "Review PR"
+
+[[actions]]
+name = "workspace-add"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "add")
+'''
+[[bindings]]
+action = "workspace-add"
+seq = ["x", "w", "a"]
+scope = "revisions"
+desc = "Add workspace"
+
+[[actions]]
+name = "workspace-list"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "list")
+'''
+[[bindings]]
+action = "workspace-list"
+seq = ["x", "w", "l"]
+scope = "revisions"
+desc = "List workspaces"
+
+[[actions]]
+name = "workspace-remove"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "remove")
+'''
+[[bindings]]
+action = "workspace-remove"
+seq = ["x", "w", "r"]
+scope = "revisions"
+desc = "Remove workspace"
+
+[[actions]]
+name = "workspace-ai-implement"
+lua = '''
+jj_interactive("util", "exec", "--", "node", "PATH_TO/dist/cli.js", "ai-implement")
+'''
+[[bindings]]
+action = "workspace-ai-implement"
+seq = ["x", "w", "i"]
+scope = "revisions"
+desc = "Create workspace and run agent"

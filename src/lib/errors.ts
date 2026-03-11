@@ -1,6 +1,7 @@
 export const EXIT_NO_BOOKMARK = 3;
 export const EXIT_JJ = 4;
 export const EXIT_GH = 5;
+export const EXIT_EMPTY = 6;
 
 export class CliError extends Error {
   constructor(

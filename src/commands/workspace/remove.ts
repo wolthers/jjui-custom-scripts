@@ -192,6 +192,10 @@ export function registerWorkspaceRemove(workspace: Command): void {
         }
       }
 
+      console.log(
+        "[workspace remove] Forgetting workspace %s...",
+        workspaceName,
+      );
       await jj(["workspace", "forget", "--", workspaceName], { cwd: repoRoot });
 
       if (!opts.keepFiles && workspacePath) {
@@ -242,6 +246,10 @@ export function registerWorkspaceRemove(workspace: Command): void {
             exitWith(1, "Aborted.");
           }
         }
+        console.log(
+          "[workspace remove] Deleting directory %s...",
+          workspacePath,
+        );
         await rm(workspacePath, { recursive: true, force: true });
       } else if (!opts.keepFiles && !workspacePath) {
         console.warn(
