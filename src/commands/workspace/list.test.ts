@@ -12,7 +12,7 @@ vi.mock("../../lib/jj.js", async () => {
 vi.mock("./registry.js", async () => {
   const mod =
     await vi.importActual<typeof import("./registry.js")>("./registry.js");
-  return { ...mod, listWorkspaceNames: vi.fn() };
+  return { ...mod, listRegistryWorkspaceNames: vi.fn() };
 });
 
 describe("workspace list", () => {
@@ -20,9 +20,12 @@ describe("workspace list", () => {
     vi.clearAllMocks();
   });
 
-  it("exits with message when registry is empty", async () => {
-    vi.mocked(jjLib.jjCapture).mockResolvedValue("/repo");
-    vi.mocked(registryLib.listWorkspaceNames).mockResolvedValue([]);
+  it("exits with message when jj has no workspaces", async () => {
+    vi.mocked(jjLib.jjCapture).mockImplementation(async (args: string[]) => {
+      if (args[0] === "root") return "/repo";
+      return "";
+    });
+    vi.mocked(registryLib.listRegistryWorkspaceNames).mockResolvedValue([]);
 
     const program = programWithWorkspace();
     const result = await runCli(program, cliArgs("workspace", "list"));
@@ -41,7 +44,7 @@ describe("workspace list", () => {
       }
       return "";
     });
-    vi.mocked(registryLib.listWorkspaceNames).mockResolvedValue([
+    vi.mocked(registryLib.listRegistryWorkspaceNames).mockResolvedValue([
       "workspace-foo",
     ]);
 
@@ -55,7 +58,7 @@ describe("workspace list", () => {
 
   it("outputs registry names only with --registry-only", async () => {
     vi.mocked(jjLib.jjCapture).mockResolvedValue("/repo");
-    vi.mocked(registryLib.listWorkspaceNames).mockResolvedValue([
+    vi.mocked(registryLib.listRegistryWorkspaceNames).mockResolvedValue([
       "workspace-a",
       "workspace-b",
     ]);
@@ -72,12 +75,14 @@ describe("workspace list", () => {
       "workspace-a",
       "workspace-b",
     ]);
-    expect(registryLib.listWorkspaceNames).toHaveBeenCalledWith("/repo");
+    expect(registryLib.listRegistryWorkspaceNames).toHaveBeenCalledWith(
+      "/repo",
+    );
   });
 
   it("exits with message when --registry-only and no workspaces", async () => {
     vi.mocked(jjLib.jjCapture).mockResolvedValue("/repo");
-    vi.mocked(registryLib.listWorkspaceNames).mockResolvedValue([]);
+    vi.mocked(registryLib.listRegistryWorkspaceNames).mockResolvedValue([]);
 
     const program = programWithWorkspace();
     const result = await runCli(

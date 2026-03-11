@@ -12,7 +12,7 @@ import { jj, jjCapture, splitLines } from "../../lib/jj.js";
 import { confirmLine, promptLine } from "../../lib/prompt.js";
 import {
   forgetWorkspaceRecord,
-  listWorkspaceNames,
+  listRegistryWorkspaceNames,
   lookupWorkspacePath,
   reconcileWorkspaceRegistry,
   type RegistryOutOfSyncRecord,
@@ -141,7 +141,7 @@ export function registerWorkspaceRemove(workspace: Command): void {
         if (!process.stdin.isTTY) {
           exitWith(1, "name required (run with a TTY to pick from list)");
         }
-        const registryNames = await listWorkspaceNames(repoRoot);
+        const registryNames = await listRegistryWorkspaceNames(repoRoot);
         const registrySet = new Set(registryNames);
         const names = [...new Set([...jjNames, ...registryNames])].toSorted();
         if (names.length === 0) {
@@ -192,40 +192,37 @@ export function registerWorkspaceRemove(workspace: Command): void {
         }
       }
 
-      console.log(
-        "[workspace remove] Forgetting workspace %s...",
-        workspaceName,
-      );
-      await jj(["workspace", "forget", "--", workspaceName], { cwd: repoRoot });
+      const pathToDelete: string | undefined =
+        !opts.keepFiles && workspacePath ? workspacePath : undefined;
 
-      if (!opts.keepFiles && workspacePath) {
-        const normPath = resolve(workspacePath);
+      if (pathToDelete) {
+        const normPath = resolve(pathToDelete);
         if (normPath === "/" || normPath === resolve(repoRoot)) {
           exitWith(
             1,
-            `Refusing to delete unsafe path: ${workspacePath}. Cannot delete root or repo.`,
+            `Refusing to delete unsafe path: ${pathToDelete}. Cannot delete root or repo.`,
           );
         }
         const allowed = isAllowedDeleteTarget(
           workspaceRoot,
           repoRoot,
-          workspacePath,
+          pathToDelete,
         );
         if (!allowed && !opts.force) {
           exitWith(
             1,
-            `Refusing to delete: ${workspacePath} is outside workspace root ${workspaceRoot}. Move the workspace there or pass --force.`,
+            `Refusing to delete: ${pathToDelete} is outside workspace root ${workspaceRoot}. Move the workspace there or pass --force.`,
           );
         }
         if (!allowed && opts.force && process.stdin.isTTY) {
           const answer = await promptLine(
-            `Type 'yes' to confirm deletion of ${workspacePath}: `,
+            `Type 'yes' to confirm deletion of ${pathToDelete}: `,
           );
           if (answer.trim().toLowerCase() !== "yes") {
             exitWith(1, "Aborted.");
           }
         }
-        const dirName = pathBasename(workspacePath);
+        const dirName = pathBasename(pathToDelete);
         if (dirName !== "" && !dirName.startsWith("workspace-")) {
           console.warn(
             `Warning: '${dirName}' does not start with 'workspace-'. Ensure this is the intended workspace.`,
@@ -239,24 +236,32 @@ export function registerWorkspaceRemove(workspace: Command): void {
         }
         if (!opts.yes && process.stdin.isTTY) {
           const ok = await confirmLine(
-            `Delete workspace '${workspaceName}' and its directory ${workspacePath}?`,
+            `Delete workspace '${workspaceName}' and its directory ${pathToDelete}?`,
             false,
           );
           if (!ok) {
             exitWith(1, "Aborted.");
           }
         }
+      }
+
+      console.log(
+        "[workspace remove] Forgetting workspace %s...",
+        workspaceName,
+      );
+      await jj(["workspace", "forget", "--", workspaceName], { cwd: repoRoot });
+      await forgetWorkspaceRecord(repoRoot, workspaceName);
+
+      if (pathToDelete) {
         console.log(
           "[workspace remove] Deleting directory %s...",
-          workspacePath,
+          pathToDelete,
         );
-        await rm(workspacePath, { recursive: true, force: true });
+        await rm(pathToDelete, { recursive: true, force: true });
       } else if (!opts.keepFiles && !workspacePath) {
         console.warn(
           `Forgot workspace '${workspaceName}', but no workspace path was found to delete.`,
         );
       }
-
-      await forgetWorkspaceRecord(repoRoot, workspaceName);
     });
 }

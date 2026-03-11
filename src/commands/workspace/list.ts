@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { EXIT_EMPTY, exitWith } from "../../lib/errors.js";
 import { jjCapture, splitLines } from "../../lib/jj.js";
 import {
-  listWorkspaceNames,
+  listRegistryWorkspaceNames,
   reconcileWorkspaceRegistry,
   type RegistryOutOfSyncRecord,
 } from "./registry.js";
@@ -66,7 +66,7 @@ export function registerWorkspaceList(workspace: Command): void {
       warnOutOfSync(outOfSync);
       if (opts.registryOnly) {
         console.log("[workspace list] Listing workspaces...");
-        const names = await listWorkspaceNames(repoRoot);
+        const names = await listRegistryWorkspaceNames(repoRoot);
         if (names.length === 0) {
           exitWith(EXIT_EMPTY, "No workspaces in registry.");
         }
@@ -75,8 +75,7 @@ export function registerWorkspaceList(workspace: Command): void {
         }
         return;
       }
-      const names = await listWorkspaceNames(repoRoot);
-      if (names.length === 0) {
+      if (jjNames.length === 0) {
         exitWith(
           EXIT_EMPTY,
           "No workspaces. Use 'workspace add' to create one.",
@@ -84,5 +83,22 @@ export function registerWorkspaceList(workspace: Command): void {
       }
       const out = await jjCapture(["workspace", "list"], { cwd: repoRoot });
       console.log(out.trim());
+      if (process.stdin.isTTY) {
+        await waitForAnyKey();
+      }
     });
+}
+
+function waitForAnyKey(): Promise<void> {
+  return new Promise((resolve) => {
+    process.stdout.write("\nPress any key to continue...");
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.once("data", () => {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      process.stdout.write("\n");
+      resolve();
+    });
+  });
 }

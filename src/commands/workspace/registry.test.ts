@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   forgetWorkspaceRecord,
-  listWorkspaceNames,
+  listRegistryWorkspaceNames,
   lookupWorkspacePath,
   reconcileWorkspaceRegistry,
   rememberWorkspace,
@@ -38,7 +38,7 @@ describe("workspace registry", () => {
     }
   });
 
-  it("listWorkspaceNames returns sorted names", async () => {
+  it("listRegistryWorkspaceNames returns sorted names", async () => {
     makeRepo();
     try {
       await rememberWorkspace({
@@ -51,7 +51,7 @@ describe("workspace registry", () => {
         workspace: "a-first",
         path: "/path/a",
       });
-      const names = await listWorkspaceNames(repoRoot);
+      const names = await listRegistryWorkspaceNames(repoRoot);
       expect(names).toEqual(["a-first", "z-last"]);
     } finally {
       cleanup();

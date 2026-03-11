@@ -20,7 +20,7 @@ vi.mock("../../lib/jj.js", async () => {
 vi.mock("./registry.js", () => ({
   lookupWorkspacePath: vi.fn(),
   forgetWorkspaceRecord: vi.fn().mockResolvedValue(undefined),
-  listWorkspaceNames: vi.fn().mockResolvedValue([]),
+  listRegistryWorkspaceNames: vi.fn().mockResolvedValue([]),
   reconcileWorkspaceRegistry: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../lib/prompt.js", () => ({
@@ -230,6 +230,8 @@ describe("workspace remove", () => {
       expect(result.stderr).toContain(
         "Refusing to delete without confirmation",
       );
+      expect(jjLib.jj).not.toHaveBeenCalled();
+      expect(registryLib.forgetWorkspaceRecord).not.toHaveBeenCalled();
     } finally {
       process.stdin.isTTY = orig;
     }
@@ -255,6 +257,8 @@ describe("workspace remove", () => {
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain("Aborted");
       expect(promptLib.confirmLine).toHaveBeenCalled();
+      expect(jjLib.jj).not.toHaveBeenCalled();
+      expect(registryLib.forgetWorkspaceRecord).not.toHaveBeenCalled();
     } finally {
       process.stdin.isTTY = orig;
     }
