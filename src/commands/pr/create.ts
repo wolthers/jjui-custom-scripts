@@ -170,6 +170,12 @@ export async function createOneDraftPr(
   }
 }
 
+const CODE_FENCE_RE = /^```[^\n]*\n([\s\S]*?)```\s*$/;
+
+/** Strip a wrapping ```lang ... ``` fence that agents sometimes add despite instructions. */
+const stripCodeFence = (text: string): string =>
+  CODE_FENCE_RE.exec(text)?.[1]?.trimEnd() ?? text;
+
 const PR_BODY_AGENT_TIMEOUT_MS = 60_000 * 5; // 5 minutes
 
 /**
@@ -208,7 +214,7 @@ export const generatePrBody = async (args: {
   });
   if (output?.trim()) {
     console.log("[pr create] Agent returned (%d chars).", output.length);
-    return output.trim();
+    return stripCodeFence(output.trim());
   }
   return null;
 };
