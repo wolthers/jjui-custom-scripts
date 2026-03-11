@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { EXIT_EMPTY, exitWith } from "../../lib/errors.js";
 import { jjCapture, splitLines } from "../../lib/jj.js";
 import {
   listWorkspaceNames,
@@ -64,11 +65,22 @@ export function registerWorkspaceList(workspace: Command): void {
       });
       warnOutOfSync(outOfSync);
       if (opts.registryOnly) {
+        console.log("[workspace list] Listing workspaces...");
         const names = await listWorkspaceNames(repoRoot);
+        if (names.length === 0) {
+          exitWith(EXIT_EMPTY, "No workspaces in registry.");
+        }
         for (const name of names) {
           console.log(name);
         }
         return;
+      }
+      const names = await listWorkspaceNames(repoRoot);
+      if (names.length === 0) {
+        exitWith(
+          EXIT_EMPTY,
+          "No workspaces. Use 'workspace add' to create one.",
+        );
       }
       const out = await jjCapture(["workspace", "list"], { cwd: repoRoot });
       console.log(out.trim());

@@ -24,7 +24,7 @@ describe("CLI wiring", () => {
     const program = programWithAll();
     const result = await runCli(program, cliArgs("ping"));
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe("pong");
+    expect(result.stdout.trim()).toBe("[ping] pong");
   });
 
   it("registers stack integrate and runs with -r", async () => {

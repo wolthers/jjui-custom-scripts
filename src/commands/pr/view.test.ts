@@ -34,7 +34,7 @@ describe("pr view", () => {
     ]);
   });
 
-  it("exits EXIT_NO_BOOKMARK when no bookmark for change", async () => {
+  it("exits EXIT_NO_BOOKMARK when no bookmark and no (#number) in description", async () => {
     vi.mocked(jjLib.jjCapture).mockResolvedValue("");
 
     const program = programWithPr();
@@ -42,6 +42,21 @@ describe("pr view", () => {
 
     expect(result.exitCode).toBe(EXIT_NO_BOOKMARK);
     expect(result.stderr).toContain("No bookmark found");
+  });
+
+  it("opens PR by (#number) from description when no bookmark exists (e.g. main@origin)", async () => {
+    vi.mocked(jjLib.jjCapture)
+      .mockResolvedValueOnce("") // resolveBookmark: bookmark list returns empty
+      .mockResolvedValueOnce(
+        "NG-3978 · Regression: 'Confirm' button missing (#1301)\n",
+      ); // getChangeDescription
+    vi.mocked(ghLib.gh).mockResolvedValue({ stdout: "", stderr: "" });
+
+    const program = programWithPr();
+    const result = await runCli(program, cliArgs("pr", "view", "-c", "@"));
+
+    expect(result.exitCode).toBe(0);
+    expect(ghLib.gh).toHaveBeenCalledWith(["pr", "view", "1301", "--web"]);
   });
 
   it("exits EXIT_GH when bookmark exists but no PR found", async () => {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { EXIT_EMPTY } from "../../lib/errors.js";
 import { cliArgs, programWithWorkspace, runCli } from "../../test-utils/cli.js";
 import * as jjLib from "../../lib/jj.js";
 import * as registryLib from "./registry.js";
@@ -19,7 +20,20 @@ describe("workspace list", () => {
     vi.clearAllMocks();
   });
 
-  it("outputs jj workspace list by default", async () => {
+  it("exits with message when registry is empty", async () => {
+    vi.mocked(jjLib.jjCapture).mockResolvedValue("/repo");
+    vi.mocked(registryLib.listWorkspaceNames).mockResolvedValue([]);
+
+    const program = programWithWorkspace();
+    const result = await runCli(program, cliArgs("workspace", "list"));
+
+    expect(result.exitCode).toBe(EXIT_EMPTY);
+    expect(result.stderr).toContain(
+      "No workspaces. Use 'workspace add' to create one.",
+    );
+  });
+
+  it("outputs jj workspace list when registry has workspaces", async () => {
     vi.mocked(jjLib.jjCapture).mockImplementation(async (args: string[]) => {
       if (args[0] === "root") return "/repo";
       if (args[0] === "workspace" && args[1] === "list") {
@@ -27,6 +41,9 @@ describe("workspace list", () => {
       }
       return "";
     });
+    vi.mocked(registryLib.listWorkspaceNames).mockResolvedValue([
+      "workspace-foo",
+    ]);
 
     const program = programWithWorkspace();
     const result = await runCli(program, cliArgs("workspace", "list"));
@@ -51,13 +68,14 @@ describe("workspace list", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim().split("\n")).toEqual([
+      "[workspace list] Listing workspaces...",
       "workspace-a",
       "workspace-b",
     ]);
     expect(registryLib.listWorkspaceNames).toHaveBeenCalledWith("/repo");
   });
 
-  it("outputs nothing with --registry-only when no workspaces", async () => {
+  it("exits with message when --registry-only and no workspaces", async () => {
     vi.mocked(jjLib.jjCapture).mockResolvedValue("/repo");
     vi.mocked(registryLib.listWorkspaceNames).mockResolvedValue([]);
 
@@ -67,7 +85,8 @@ describe("workspace list", () => {
       cliArgs("workspace", "list", "--registry-only"),
     );
 
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe("");
+    expect(result.exitCode).toBe(EXIT_EMPTY);
+    expect(result.stderr).toContain("No workspaces in registry.");
+    expect(result.stdout).toContain("[workspace list] Listing workspaces...");
   });
 });

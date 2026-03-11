@@ -5,6 +5,6 @@ export const registerPing = (program: Command): void => {
     .command("ping")
     .description("Health check command")
     .action(() => {
-      console.log("pong");
+      console.log("[ping] pong");
     });
 };
