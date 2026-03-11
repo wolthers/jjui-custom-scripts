@@ -9,17 +9,20 @@ import {
 import type { Command } from "commander";
 import { exitWith } from "../../lib/errors.js";
 import { jj, jjCapture, splitLines } from "../../lib/jj.js";
-import { promptLine } from "../../lib/prompt.js";
+import { confirmLine, promptLine } from "../../lib/prompt.js";
 import {
   forgetWorkspaceRecord,
   listWorkspaceNames,
   lookupWorkspacePath,
+  reconcileWorkspaceRegistry,
+  type RegistryOutOfSyncRecord,
 } from "./registry.js";
 
 type WorkspaceRemoveOptions = {
   path?: string;
   keepFiles?: boolean;
   force?: boolean;
+  yes?: boolean;
 };
 
 const resolvePathOption = (baseDir: string, path: string): string =>
@@ -85,6 +88,23 @@ async function listJjWorkspaceNames(repoRoot: string): Promise<string[]> {
     .filter((s) => s.length > 0);
 }
 
+function warnOutOfSync(records: RegistryOutOfSyncRecord[]): void {
+  for (const record of records) {
+    if (record.reason === "missing-folder") {
+      console.warn(
+        `Warning: Registry entry '${record.workspace}' pointed to missing folder '${record.path}'. Removed from registry.`,
+      );
+      continue;
+    }
+    const suffix = record.folderExists
+      ? "Folder still exists; remove it manually if no longer needed."
+      : "Folder is also missing.";
+    console.warn(
+      `Warning: Registry entry '${record.workspace}' exists, but jj no longer has that workspace. Removed from registry. ${suffix}`,
+    );
+  }
+}
+
 export function registerWorkspaceRemove(workspace: Command): void {
   workspace
     .command("remove [name]")
@@ -105,19 +125,23 @@ export function registerWorkspaceRemove(workspace: Command): void {
       "Allow deleting a path outside the workspace root (sibling of repo); with TTY, requires typing 'yes' to confirm",
       false,
     )
+    .option("-y, --yes", "Skip confirmation prompt before delete", false)
     .action(async (name: string | undefined, opts: WorkspaceRemoveOptions) => {
       const repoRoot = (await jjCapture(["root"])).trim();
       const workspaceRoot = getWorkspaceRoot(repoRoot);
+      const jjNames = await listJjWorkspaceNames(repoRoot);
+      const outOfSync = await reconcileWorkspaceRegistry({
+        repoRoot,
+        jjWorkspaceNames: jjNames,
+      });
+      warnOutOfSync(outOfSync);
       const currentWorkspace = await getCurrentWorkspaceName(repoRoot);
       let workspaceName: string;
       if (!name?.trim()) {
         if (!process.stdin.isTTY) {
           exitWith(1, "name required (run with a TTY to pick from list)");
         }
-        const [jjNames, registryNames] = await Promise.all([
-          listJjWorkspaceNames(repoRoot),
-          listWorkspaceNames(repoRoot),
-        ]);
+        const registryNames = await listWorkspaceNames(repoRoot);
         const registrySet = new Set(registryNames);
         const names = [...new Set([...jjNames, ...registryNames])].toSorted();
         if (names.length === 0) {
@@ -202,6 +226,21 @@ export function registerWorkspaceRemove(workspace: Command): void {
           console.warn(
             `Warning: '${dirName}' does not start with 'workspace-'. Ensure this is the intended workspace.`,
           );
+        }
+        if (!opts.yes && !process.stdin.isTTY) {
+          exitWith(
+            1,
+            "Refusing to delete without confirmation (pass --yes for non-TTY).",
+          );
+        }
+        if (!opts.yes && process.stdin.isTTY) {
+          const ok = await confirmLine(
+            `Delete workspace '${workspaceName}' and its directory ${workspacePath}?`,
+            false,
+          );
+          if (!ok) {
+            exitWith(1, "Aborted.");
+          }
         }
         await rm(workspacePath, { recursive: true, force: true });
       } else if (!opts.keepFiles && !workspacePath) {
