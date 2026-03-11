@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import {
   forgetWorkspaceRecord,
   listWorkspaceNames,
   lookupWorkspacePath,
+  reconcileWorkspaceRegistry,
   rememberWorkspace,
 } from "./registry.js";
 
@@ -103,12 +104,63 @@ describe("workspace registry", () => {
     try {
       const registryPath = join(repoRoot, ".jj", "jj-scripts-workspaces.json");
       const dir = join(repoRoot, ".jj");
-      const { mkdirSync } = await import("node:fs");
       mkdirSync(dir, { recursive: true });
       writeFileSync(registryPath, '{"version":2,"workspaces":{}}', "utf8");
       await expect(lookupWorkspacePath(repoRoot, "x")).rejects.toThrow(
         /Invalid workspace registry format/,
       );
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("removes registry entries when folder is missing", async () => {
+    makeRepo();
+    try {
+      const missingPath = join(repoRoot, "workspace-missing");
+      await rememberWorkspace({
+        repoRoot,
+        workspace: "workspace-missing",
+        path: missingPath,
+      });
+
+      const out = await reconcileWorkspaceRegistry({
+        repoRoot,
+        jjWorkspaceNames: ["workspace-missing"],
+      });
+
+      expect(out).toHaveLength(1);
+      expect(out[0]?.reason).toBe("missing-folder");
+      expect(
+        await lookupWorkspacePath(repoRoot, "workspace-missing"),
+      ).toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("removes registry entries when jj workspace is missing", async () => {
+    makeRepo();
+    try {
+      const path = join(repoRoot, "workspace-orphaned");
+      mkdirSync(path, { recursive: true });
+      await rememberWorkspace({
+        repoRoot,
+        workspace: "workspace-orphaned",
+        path,
+      });
+
+      const out = await reconcileWorkspaceRegistry({
+        repoRoot,
+        jjWorkspaceNames: [],
+      });
+
+      expect(out).toHaveLength(1);
+      expect(out[0]?.reason).toBe("missing-jj-workspace");
+      expect(out[0]?.folderExists).toBe(true);
+      expect(
+        await lookupWorkspacePath(repoRoot, "workspace-orphaned"),
+      ).toBeUndefined();
     } finally {
       cleanup();
     }

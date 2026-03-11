@@ -15,15 +15,15 @@ Then point your jj/jjui config at the built binary (see [Configuration](#configu
 
 - **`jj-scripts pr view --change-id <id>`** — Resolve the bookmark for the given change and open its PR on GitHub in the browser. If the bookmark has no PR, parses a `(#number)` reference from the change description and opens that PR by number.
 - **`jj-scripts pr create --change-id <id>`** — Try to view an existing PR first; if none exists, generate a PR body with the configured agent (see [Agent configuration](#agent-configuration)), open it in your editor, then create a draft PR and open it. If no agent is available, uses the PR template and opens the editor.
-- **`jj-scripts pr checkout <pr-number>`** — Check out a PR in a new jj workspace. Fetches the latest from git, creates a full workspace (`.env*`, direnv, registry), and runs `jj new <branch>@origin` in it. Workspace destination defaults to `workspace-pr-<branch>`.
+- **`jj-scripts pr checkout [pr-number]`** — Check out a PR in a new jj workspace. Fetches the latest from git, creates a full workspace (`.env*`, direnv, registry), and runs `jj checkout <branch>@origin` in it, then opens the workspace in Cursor in a new window. If `pr-number` is omitted and stdin is a TTY, prompts for it. Optionally pass `--change-id` to resolve the PR from the change's bookmark; use `--no-open` to skip opening Cursor.
 - **`jj-scripts pr graph [-o file.png]`** — Build the branch stack graph from current main (or dev) only and output DOT; with `-o`/`--out`, render to PNG (requires `dot` on PATH).
 - **`jj-scripts pr sync [-y|--yes]`** — Sync PRs to the branch stack: ensure a PR exists for each branch (create if missing, with prompt unless `--yes`), update base branch when the stack changed, and add/update “part of a stack” comments on each PR.
 - **`jj-scripts stack integrate -r <rev>`** — Rebase the given revision onto `trunk()` then merge (integrate into a mega merge).
 - **`jj-scripts stack restack`** — Run `jj simplify-parents` then rebase mutable roots onto `trunk()`.
 - **`jj-scripts workspace add [destination] [--name <name>] [--prefix <prefix>] [-r <rev>]`** — Create a new jj workspace and prepare it (copy `.env*`, run `direnv allow`). The new workspace path is a **sibling** of the repo root. If `destination` is omitted and stdin is a TTY, prompts for a name (prefixed with `workspace-`). Does not run an agent; use `ai-implement` for that.
 - **`jj-scripts ai-implement [destination] [options]`** — Create a workspace (same as `workspace add`), then launch the agent **in plan mode in the foreground**. You describe your task directly in the agent session — no editor step. The agent owns this terminal tab until it exits. When done, cherry-pick commits from the agent workspace into your main working dir.
-- **`jj-scripts workspace list`** — List registered workspace names (one per line).
-- **`jj-scripts workspace remove [name] [--path <path>]`** — Forget a workspace and delete its folder. If `name` is omitted and stdin is a TTY, lists workspaces and prompts to pick by number or name.
+- **`jj-scripts workspace list [--registry-only]`** — List jj workspaces. By default runs `jj workspace list`; use `--registry-only` for one name per line from the CLI registry. Before listing, stale registry entries are removed with warnings (missing folder, or missing jj workspace).
+- **`jj-scripts workspace remove [name] [--path <path>] [-y|--yes]`** — Forget a workspace and delete its folder. If `name` is omitted and stdin is a TTY, lists workspaces and prompts to pick by number or name. Prompts for confirmation before deleting unless `--yes` is passed. Also warns and prunes stale registry entries before selection.
 
 Requires `jj` and `gh` on your PATH.
 
@@ -44,42 +44,67 @@ Your configs have been wired to invoke this CLI so you no longer need inline Lua
 - **jj** — `jj integrate` and `jj restack` run the CLI via `util exec`. Update the path in `~/.config/jj/config.toml` if you move the repo.
 - **jjui** — Add custom commands in `~/.config/jjui/config.toml` that call this CLI with the absolute path to `dist/cli.js`. Use jjui’s `$change_id` placeholder for change-scoped commands.
 
-Example jjui custom commands (replace `PATH_TO_JJ_SCRIPTS` with the repo path, e.g. `/Volumes/Work/github/jj-scripts`):
+Example jjui config (replace `PATH_TO` with the absolute path to your repo):
 
 ```toml
 [custom_commands.integrate]
+key_sequence = ["x", "i"]
 desc = "Integrate change in a stack"
-key = ["i"]
-args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "stack", "integrate", "-r", "@"]
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "integrate", "-r", "@"]
+show = "interactive"
+
+[custom_commands.restack]
+key_sequence = ["x", "r"]
+desc = "Restack"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "stack", "restack"]
+show = "interactive"
+
+[custom_commands.sync-prs]
+key_sequence = ["x", "p", "s"]
+desc = "Sync PRs"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "sync"]
 show = "interactive"
 
 [custom_commands.view-pr]
-desc = "View PR on GitHub"
-key = ["o"]
-args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "pr", "view", "--change-id", "$change_id"]
+key_sequence = ["x", "p", "v"]
+desc = "View PR"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "view", "--change-id", "$change_id"]
 show = "interactive"
 
 [custom_commands.create-pr]
-desc = "Create draft PR (or view existing)"
-args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "pr", "create", "--change-id", "$change_id"]
+key_sequence = ["x", "p", "c"]
+desc = "Create draft PR"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "create", "--change-id", "$change_id"]
 show = "interactive"
 
-# Workspace add: creates workspace only (no agent)
+[custom_commands.review-pr]
+key_sequence = ["x", "p", "r"]
+desc = "Review PR"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "pr", "checkout"]
+show = "interactive"
+
 [custom_commands.workspace-add]
-desc = "Add jj workspace"
-args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "workspace", "add"]
+key_sequence = ["x", "w", "a"]
+desc = "Add workspace"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "add"]
 show = "interactive"
 
-# ai-implement: create workspace then run agent in foreground (use in a dedicated terminal tab)
-[custom_commands.ai-implement]
-desc = "Create workspace and run agent in foreground"
-args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "ai-implement"]
+[custom_commands.workspace-list]
+key_sequence = ["x", "w", "l"]
+desc = "List workspaces"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "list"]
 show = "interactive"
 
-# Workspace remove: the CLI lists workspaces and prompts to pick one when no name is passed
 [custom_commands.workspace-remove]
-desc = "Remove jj workspace"
-args = ["util", "exec", "--", "node", "PATH_TO_JJ_SCRIPTS/dist/cli.js", "workspace", "remove"]
+key_sequence = ["x", "w", "r"]
+desc = "Remove workspace"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "workspace", "remove"]
+show = "interactive"
+
+[custom_commands.workspace-ai-implement]
+key_sequence = ["x", "w", "i"]
+desc = "Create workspace and run agent"
+args = ["util", "exec", "--", "node", "PATH_TO/dist/cli.js", "ai-implement"]
 show = "interactive"
 ```
 

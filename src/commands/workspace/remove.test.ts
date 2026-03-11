@@ -21,9 +21,11 @@ vi.mock("./registry.js", () => ({
   lookupWorkspacePath: vi.fn(),
   forgetWorkspaceRecord: vi.fn().mockResolvedValue(undefined),
   listWorkspaceNames: vi.fn().mockResolvedValue([]),
+  reconcileWorkspaceRegistry: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../lib/prompt.js", () => ({
   promptLine: vi.fn().mockResolvedValue(""),
+  confirmLine: vi.fn().mockResolvedValue(true),
 }));
 
 describe("workspace remove", () => {
@@ -201,11 +203,61 @@ describe("workspace remove", () => {
     const program = programWithWorkspace();
     const result = await runCli(
       program,
-      cliArgs("workspace", "remove", "my-ws"),
+      cliArgs("workspace", "remove", "my-ws", "--yes"),
     );
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toContain("does not start with 'workspace-'");
+  });
+
+  it("refuses delete without --yes when not a TTY", async () => {
+    mockJjCapture();
+    vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
+    vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(
+      "/tmp/workspace-foo",
+    );
+
+    const orig = process.stdin.isTTY;
+    process.stdin.isTTY = false;
+    try {
+      const program = programWithWorkspace();
+      const result = await runCli(
+        program,
+        cliArgs("workspace", "remove", "my-ws"),
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        "Refusing to delete without confirmation",
+      );
+    } finally {
+      process.stdin.isTTY = orig;
+    }
+  });
+
+  it("prompts for confirmation and aborts when user says no", async () => {
+    mockJjCapture();
+    vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
+    vi.mocked(registryLib.lookupWorkspacePath).mockResolvedValue(
+      "/tmp/workspace-foo",
+    );
+    vi.mocked(promptLib.confirmLine).mockResolvedValue(false);
+
+    const orig = process.stdin.isTTY;
+    process.stdin.isTTY = true;
+    try {
+      const program = programWithWorkspace();
+      const result = await runCli(
+        program,
+        cliArgs("workspace", "remove", "my-ws"),
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Aborted");
+      expect(promptLib.confirmLine).toHaveBeenCalled();
+    } finally {
+      process.stdin.isTTY = orig;
+    }
   });
 
   it("refuses to remove the current workspace", async () => {
@@ -226,7 +278,7 @@ describe("workspace remove", () => {
   it("can forget a workspace named --help", async () => {
     mockJjCapture({
       currentWorkspace: "default",
-      workspaceList: "\"--help\"\ndefault\n",
+      workspaceList: '"--help"\ndefault\n',
       workspaceRoot: "",
     });
     vi.mocked(jjLib.jj).mockResolvedValue({ stdout: "", stderr: "" });
@@ -237,7 +289,10 @@ describe("workspace remove", () => {
     process.stdin.isTTY = true;
     const program = programWithWorkspace();
     try {
-      const result = await runCli(program, cliArgs("workspace", "remove", "--keep-files"));
+      const result = await runCli(
+        program,
+        cliArgs("workspace", "remove", "--keep-files"),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(jjLib.jj).toHaveBeenCalledWith(
