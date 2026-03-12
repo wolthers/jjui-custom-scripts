@@ -108,7 +108,8 @@ export function registerCheckout(pr: Command): void {
 
         await jj(["git", "fetch"], { cwd: repoRoot });
 
-        const destination = `${opts.prefix ?? "workspace-pr-"}${branch}`;
+        const safeBranch = branch.replaceAll("/", "-");
+        const destination = `${opts.prefix ?? "workspace-pr-"}${safeBranch}`;
 
         const { workspacePath } = await createWorkspace(
           repoRoot,
