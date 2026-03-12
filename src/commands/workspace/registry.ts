@@ -138,7 +138,6 @@ export async function lookupWorkspaceBookmark(
   return registry.workspaces[workspace]?.bookmark;
 }
 
-
 export async function forgetWorkspaceRecord(
   repoRoot: string,
   workspace: string,

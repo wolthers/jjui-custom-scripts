@@ -52,6 +52,7 @@ export function registerWorkspaceOpen(workspace: Command): void {
         if (all.length === 0) {
           exitWith(1, "No workspaces found.");
         }
+        console.log("Select the workspace you want to open:\n");
         for (let i = 0; i < all.length; i++) {
           const n = all[i]!;
           const suffix = registrySet.has(n) ? " (tracked)" : "";

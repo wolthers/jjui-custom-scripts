@@ -119,7 +119,11 @@ async function setupGitWorktree(
 
   // Populate the git index so git ls-files works in the workspace
   await execa("git", ["read-tree", commitSha], {
-    env: { ...process.env, GIT_DIR: worktreeMetaDir, GIT_WORK_TREE: workspacePath },
+    env: {
+      ...process.env,
+      GIT_DIR: worktreeMetaDir,
+      GIT_WORK_TREE: workspacePath,
+    },
     cwd: workspacePath,
     reject: false,
   });

@@ -134,6 +134,7 @@ export function registerWorkspaceRemove(workspace: Command): void {
         if (names.length === 0) {
           exitWith(1, "No jj workspaces found.");
         }
+        console.log("Select the workspace you want to remove:\n");
         for (let i = 0; i < names.length; i++) {
           const n = names[i]!;
           const flags: string[] = [];
