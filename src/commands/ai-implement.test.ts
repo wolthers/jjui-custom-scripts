@@ -1,5 +1,5 @@
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cliArgs, programWithAiImplement, runCli } from "../test-utils/cli.js";
@@ -55,7 +55,6 @@ describe("ai-implement", () => {
   });
 
   it("creates workspace and launches agent when destination is provided", async () => {
-    const { join } = await import("node:path");
     repoRoot = mkdtempSync(join(tmpdir(), "jj-scripts-repo-"));
     const workspacePath = resolve(dirname(repoRoot), "ws-ai");
     mkdirSync(workspacePath, { recursive: true });
@@ -78,7 +77,6 @@ describe("ai-implement", () => {
   });
 
   it("passes --skip-setup-prompt to omit setup prompt from agent", async () => {
-    const { join } = await import("node:path");
     repoRoot = mkdtempSync(join(tmpdir(), "jj-scripts-repo-"));
     const workspacePath = resolve(dirname(repoRoot), "ws-skip");
     mkdirSync(workspacePath, { recursive: true });
@@ -98,7 +96,6 @@ describe("ai-implement", () => {
   });
 
   it("prepends --prefix to destination when provided", async () => {
-    const { join } = await import("node:path");
     repoRoot = mkdtempSync(join(tmpdir(), "jj-scripts-repo-"));
     const workspacePath = resolve(dirname(repoRoot), "workspace-foo");
     mkdirSync(workspacePath, { recursive: true });
